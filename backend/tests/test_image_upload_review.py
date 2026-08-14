@@ -118,6 +118,14 @@ def test_confirming_review_indexes_document_and_makes_it_searchable(client, monk
         json={"inhalt": reviewed["ki_analyse_rohtext"]},
     )
     assert confirm.status_code == 200
+    # Regressionsschutz: die Bestaetigung muss sofort auf 'pending' wechseln
+    # (wie reprocess_document), nicht auf 'review_required' stehen bleiben -
+    # sonst haelt das Frontend das Dokument faelschlich fuer "wartet nicht auf
+    # aktive Verarbeitung" und pollt den Abschluss der Hintergrund-Indexierung
+    # nie nach (siehe Bugfix: Nutzer sah ein veraltetes Review-Panel, obwohl
+    # das Dokument laengst 'ready' war, und ein zweiter Bestaetigungsversuch
+    # schlug dann mit 409 fehl).
+    assert confirm.json()["status"] == "pending"
 
     final = wait_for_document_status(client, project_id, created["id"])
     assert final["status"] == "ready"
@@ -193,7 +201,10 @@ def test_image_analysis_failure_marks_document_failed(client, monkeypatch):
     from app.config import get_settings
 
     project_id = _create_project(client)
-    monkeypatch.delenv("CLAUDE_API_KEY", raising=False)
+    # Siehe test_chat.py::test_user_message_survives_claude_failure: leerer
+    # String statt delenv, damit ein evtl. in backend/.env hinterlegter echter
+    # Key nicht als Fallback einspringt und einen echten API-Aufruf ausloest.
+    monkeypatch.setenv("CLAUDE_API_KEY", "")
     get_settings.cache_clear()
 
     created = _upload_image(client, project_id)

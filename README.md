@@ -241,13 +241,21 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   `None`, wird die Vision-Analyse ausgeführt, `ocr_text`/`ki_analyse_rohtext`
   gesetzt, Status auf `review_required` gesetzt und die Funktion kehrt zurück
   – Chunking/Embedding laufen bewusst nicht in demselben Durchlauf. Bestätigt
-  der Nutzer die Analyse (`confirm_image_review`), wird nur `inhalt` gesetzt
-  und `process_document()` erneut eingereiht: `inhalt` ist dann bereits
-  gesetzt, die Funktion überspringt Extraktion/Vision-Analyse komplett und
-  indexiert direkt (`review_required` → `indexing`, ohne nochmal über
-  `processing` zu laufen) – dieselbe idempotente Funktion bedient damit alle
-  drei Eingabewege (manueller Text, Datei-Upload, Bild-Review), ohne
-  Sonderfall-Code im Background-Task-Runner.
+  der Nutzer die Analyse (`confirm_image_review`), wird `inhalt` gesetzt,
+  Status auf `pending` zurückgesetzt (wie bei `reprocess_document`) und
+  `process_document()` erneut eingereiht: `inhalt` ist dann bereits gesetzt,
+  die Funktion überspringt Extraktion/Vision-Analyse komplett und indexiert
+  direkt – dieselbe idempotente Funktion bedient damit alle drei Eingabewege
+  (manueller Text, Datei-Upload, Bild-Review), ohne Sonderfall-Code im
+  Background-Task-Runner.
+  **Bugfix nach erstem Nutzer-Test:** ursprünglich blieb der Status nach der
+  Bestätigung auf `review_required` stehen (kein Wechsel auf einen der vom
+  Frontend aktiv gepollten Status) – da die Hintergrund-Indexierung oft
+  schneller fertig ist, als das Frontend reagieren kann, zeigte die
+  Review-Ansicht dann faelschlich weiter das (bereits erledigte) Panel an,
+  und ein zweiter Bestätigungsversuch schlug mit 409 fehl. Der Wechsel auf
+  `pending` behebt das, ohne dass das Frontend selbst etwas Besonderes tun
+  muss (`pending` ist ohnehin schon ein aktiv gepollter Status).
 - **Antwortformat der Vision-Analyse:** feste Zwei-Block-Struktur
   (`<ocr_text>…</ocr_text><analyse>…</analyse>`) statt eines
   JSON-Schemas/Structured-Output-Constraints – reicht für den MVP, bleibt

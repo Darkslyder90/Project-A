@@ -225,10 +225,17 @@ def confirm_image_review(
         raise ValidationAppError("Der bestaetigte Inhalt darf nicht leer sein.")
 
     document.inhalt = confirmed
+    # Sofort auf 'pending' setzen (wie bei reprocess_document) statt auf
+    # review_required stehen zu lassen: der Hintergrund-Job kann schneller
+    # fertig sein, als das Frontend reagieren kann. review_required ist fuer
+    # das Frontend kein "aktiver" Status, den es laufend abfragt - ohne diesen
+    # Wechsel wuerde die Review-Ansicht daher faelschlich stehen bleiben, obwohl
+    # das Dokument im Hintergrund laengst fertig verarbeitet wurde.
+    document.status = DocumentStatus.PENDING
     db.commit()
     db.refresh(document)
 
-    # process_document() findet inhalt jetzt gesetzt vor und indexiert direkt
-    # (review_required -> indexing), ohne die Vision-Analyse zu wiederholen.
+    # process_document() findet inhalt jetzt gesetzt vor und ueberspringt daher
+    # Extraktion/Vision-Analyse, indexiert also direkt.
     task_runner.enqueue(document.id)
     return document

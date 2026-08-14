@@ -59,9 +59,10 @@ def process_document(db: Session, document_id: int) -> None:
     Bilder (Schritt 9) durchlaufen dieselbe Funktion, halten aber nach der
     Vision-Analyse an: `inhalt` bleibt bewusst leer, bis der Nutzer die
     KI-Analyse im Review-Schritt bestaetigt/bearbeitet (siehe
-    document_service.confirm_image_review). Ein erneuter Aufruf hier - z. B.
-    aus der Task-Queue nach genau dieser Bestaetigung - findet `inhalt` dann
-    bereits gesetzt vor und indexiert direkt, ohne die Analyse zu wiederholen.
+    document_service.confirm_image_review, setzt dabei status=pending und
+    reiht erneut hier ein). Ein erneuter Aufruf hier findet `inhalt` dann
+    bereits gesetzt vor, ueberspringt Extraktion/Vision-Analyse komplett und
+    indexiert direkt, ohne die Analyse zu wiederholen.
     """
     document = db.get(Document, document_id)
     if document is None:
@@ -70,14 +71,8 @@ def process_document(db: Session, document_id: int) -> None:
     settings = get_settings()
     chroma_dir = str(settings.chroma_dir)
 
-    # Ein Dokument, das gerade auf Review wartet und hier erneut ankommt (nach
-    # Bestaetigung durch den Nutzer), hat seine "Verarbeitung" im eigentlichen
-    # Sinn (Extraktion/Analyse) bereits hinter sich - Statuskette geht dann
-    # direkt review_required -> indexing, ohne nochmal ueber processing zu laufen.
-    resuming_after_review = document.status == DocumentStatus.REVIEW_REQUIRED
-    if not resuming_after_review:
-        document.status = DocumentStatus.PROCESSING
-        db.commit()
+    document.status = DocumentStatus.PROCESSING
+    db.commit()
 
     try:
         if document.inhalt is None:

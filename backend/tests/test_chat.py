@@ -146,7 +146,13 @@ def test_user_message_survives_claude_failure(client, monkeypatch):
 
     project_id = _create_project_with_doc(client)
     conversation_id = _create_conversation(client, project_id)
-    monkeypatch.delenv("CLAUDE_API_KEY", raising=False)
+    # Bewusst auf einen leeren String setzen statt delenv: eine geloeschte
+    # Env-Var faellt bei pydantic-settings auf einen ggf. vorhandenen echten
+    # Wert in backend/.env zurueck (falls dort z. B. fuer die lokale Dev-Nutzung
+    # ein echter Key hinterlegt ist) - das wuerde diesen Test zu einem echten,
+    # unbeabsichtigten Anthropic-API-Aufruf machen. Eine explizit gesetzte,
+    # leere Env-Var hat dagegen immer Vorrang vor der .env-Datei.
+    monkeypatch.setenv("CLAUDE_API_KEY", "")
     get_settings.cache_clear()
 
     response = client.post(
