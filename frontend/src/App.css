@@ -1,0 +1,36 @@
+.app-shell {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+.subtitle {
+  color: var(--color-text-muted);
+  margin-top: -0.5rem;
+}
+
+.status-card {
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-top: 2rem;
+}
+
+.status-ok {
+  color: var(--color-ok);
+  font-weight: 600;
+}
+
+.status-error {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.status-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
