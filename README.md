@@ -72,9 +72,19 @@ Aktuell abgeschlossen:
     (candidate_k je Suchpfad, final_k, Chunk-Zielgröße/Overlap – wirkt sofort
     auf neue Retrieval-Anfragen), kompakte API-Nutzungsübersicht (heute/
     Woche/Monat, Anfragen + Tokens)
+14. ✅ Export/Import: Projekt-Export als ZIP (versioniertes Manifest +
+    `data.json` mit Documents/Personen/Tasks/Meetings/Tags/Chats +
+    Originaldateien), bewusst ohne Claude-API-Key/globale Settings/Chunks
+    (abgeleitet, siehe Source-of-Truth-Prinzip). Import legt immer ein neues
+    Projekt mit komplett neu vergebenen IDs an (durchgängiges Remapping aller
+    Fremdschlüssel, inkl. Quellen-Snapshots im Chatverlauf), ist transaktional
+    (Fehler mitten im Import räumt DB-Änderungen und bereits kopierte Dateien
+    wieder auf) und Zip-Slip-geschützt; nach erfolgreichem Import wird jedes
+    Dokument automatisch neu indexiert (Chroma ist für das neue Projekt
+    zunächst leer)
 
-Alle weiteren Schritte (Export/Import, Backup/Update, Docker/Prod-Deployment)
-folgen schrittweise.
+Alle weiteren Schritte (Backup/Update, Docker/Prod-Deployment) folgen
+schrittweise.
 
 ## Lokale Entwicklung
 
@@ -443,6 +453,43 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   echter API-Call in einem Test, ein Modell-Settings-Test schlug lokal fehl).
   Jetzt sehen Tests ausschließlich Klassen-Defaults + explizit gesetzte
   Env-Vars, nie die tatsächliche `.env`-Datei.
+- **Export-Format als ZIP mit `manifest.json` + `data.json` statt eines
+  SQLite-Auszugs** – die Datenstruktur zwischen App-Versionen kann sich
+  ändern, ein versioniertes, lesbares JSON-Format lässt sich beim Import
+  gezielt migrieren/ablehnen (`manifest.version` wird geprüft), ein rohes
+  SQLite-Fragment wäre an interne Schema-Details der exportierenden Version
+  gebunden.
+- **Chunks werden nie exportiert/importiert** (siehe Source-of-Truth-Prinzip:
+  abgeleitete, jederzeit rekonstruierbare Indexdaten) – nach jedem Import
+  wird automatisch eine vollständige Neuindexierung angestoßen, indem alle
+  importierten Dokumente ganz normal über den bestehenden
+  `DocumentTaskRunner`/`process_document()`-Pfad eingereiht werden. Da das
+  neue Projekt naturgemäß noch keinen aktiven Index hat, ist dafür keine
+  Blue-/Green-Rebuild-Logik nötig (die für das *Neuindexieren eines bereits
+  aktiven Projekts* separat aussteht) – ein Sonderfall weniger.
+- **`_build_project_graph()` als eigene, reine DB-Aufbaufunktion** getrennt
+  von `import_project()` (ZIP-Handling/Validierung/Cleanup): fängt
+  `KeyError`/`TypeError`/`ValueError` gebündelt in eine verständliche
+  `ValidationAppError` um, statt dass eine unerwartete `data.json`-Struktur
+  (z. B. ein manuell frisiertes Archiv) als roher 500er durchschlägt – ein
+  gültiges Manifest allein ist keine Garantie für eine wohlgeformte Datei.
+- **Datei-Kopien werden bei einem fehlgeschlagenen Import wieder entfernt**
+  (`shutil.rmtree` auf das neue Projekt-Upload-Verzeichnis im
+  Fehlerpfad von `import_project()`): die DB-Transaktion wird zwar per
+  `db.rollback()` zurückgerollt, doch bereits auf die Platte kopierte
+  Originaldateien liegen aus Sicht der DB-Transaktion "daneben" und müssen
+  deshalb explizit mit aufgeräumt werden, sonst blieben verwaiste Dateien
+  ohne zugehörige DB-Zeile zurück.
+- **Quellen-Snapshots im exportierten Chatverlauf werden beim Import
+  mitremappt** (`quellen[].document_id` wird über dieselbe Document-ID-Map
+  wie alle anderen Referenzen umgeschrieben) – sonst würden alte
+  Chat-Zitate im importierten Projekt fälschlich als "Quelle gelöscht"
+  erscheinen, obwohl das referenzierte Dokument im neuen Projekt genauso
+  existiert, nur unter einer neuen ID.
+- **Export/Import bewusst ohne API-Key/globale Settings** (siehe Briefing:
+  strikte Trennung von System-Backup und Projekt-Export) – ein importiertes
+  Projekt nutzt automatisch die auf der Zielinstanz bereits konfigurierte
+  Claude-Einstellung, ohne dass der Import selbst eine mitbringt.
 
 ## Persistenzstruktur
 

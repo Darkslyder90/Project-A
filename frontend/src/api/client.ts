@@ -263,6 +263,12 @@ export const api = {
   createProject: (input: ProjectCreateInput) =>
     request<Project>('/api/projects', { method: 'POST', body: JSON.stringify(input) }),
   deleteProject: (id: number) => request<void>(`/api/projects/${id}`, { method: 'DELETE' }),
+  exportProjectUrl: (projectId: number) => `/api/projects/${projectId}/export`,
+  importProject: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return requestForm<Project>('/api/projects/import', formData)
+  },
 
   listDocuments: (projectId: number) => request<Document[]>(`/api/projects/${projectId}/documents`),
   createDocument: (projectId: number, input: DocumentCreateInput) =>

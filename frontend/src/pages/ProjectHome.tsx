@@ -51,7 +51,12 @@ export function ProjectHome({ projectId, onSwitch }: Props) {
           <h1>{project?.name ?? '…'}</h1>
           {project?.beschreibung && <p className="subtitle">{project.beschreibung}</p>}
         </div>
-        <button onClick={onSwitch}>Projekt wechseln</button>
+        <div className="project-home-header-actions">
+          <a className="link-button" href={api.exportProjectUrl(projectId)}>
+            Projekt exportieren
+          </a>
+          <button onClick={onSwitch}>Projekt wechseln</button>
+        </div>
       </header>
 
       {error && <p className="status-error">{error}</p>}

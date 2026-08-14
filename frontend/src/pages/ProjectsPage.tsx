@@ -13,6 +13,8 @@ export function ProjectsPage({ onSelect }: Props) {
   const [creating, setCreating] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
 
   const loadProjects = () => {
     api
@@ -40,6 +42,22 @@ export function ProjectsPage({ onSelect }: Props) {
       setError((err as Error).message)
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleImport = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!importFile) return
+    setImporting(true)
+    setError(null)
+    try {
+      const project = await api.importProject(importFile)
+      setImportFile(null)
+      setProjects((prev) => [...(prev ?? []), project])
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -80,6 +98,17 @@ export function ProjectsPage({ onSelect }: Props) {
         />
         <button type="submit" disabled={creating}>
           {creating ? 'Wird angelegt …' : 'Projekt anlegen'}
+        </button>
+      </form>
+
+      <form className="import-project-form" onSubmit={handleImport}>
+        <input
+          type="file"
+          accept=".zip"
+          onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+        />
+        <button type="submit" disabled={importing || !importFile}>
+          {importing ? 'Wird importiert …' : 'Projekt-Export importieren'}
         </button>
       </form>
 
