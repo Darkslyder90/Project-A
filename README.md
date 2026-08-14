@@ -65,9 +65,16 @@ Aktuell abgeschlossen:
     Formulare/Listen (inkl. der jetzt wieder eingebundenen Aufgaben-Section);
     "Chat" bündelt Chat + Retrieval-Test. Dabei nachgezogen: minimale
     Tag-Verwaltung (bisher nur Datenmodell, nie an eine UI angebunden)
+13. ✅ Settings: globale Einstellungsseite (eigener Reiter-übergreifender
+    Bereich, kein Projektbezug) – Claude-API-Key verschlüsselt in SQLite
+    (Fernet, Klartext nie im UI/Log), maskierte Anzeige, `.env`-Fallback,
+    Claude-Chatmodell unabhängig vom Embedding-Modell wählbar, RAG-Feintuning
+    (candidate_k je Suchpfad, final_k, Chunk-Zielgröße/Overlap – wirkt sofort
+    auf neue Retrieval-Anfragen), kompakte API-Nutzungsübersicht (heute/
+    Woche/Monat, Anfragen + Tokens)
 
-Alle weiteren Schritte (Settings, Export/Import, Backup/Update,
-Docker/Prod-Deployment) folgen schrittweise.
+Alle weiteren Schritte (Export/Import, Backup/Update, Docker/Prod-Deployment)
+folgen schrittweise.
 
 ## Lokale Entwicklung
 
@@ -396,6 +403,46 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   mehrspaltigen Übersichtstabellen nicht zu gedrängt wirken; einzelne
   Tabellen bekommen zusätzlich `overflow-x: auto`, falls der Inhalt trotzdem
   nicht passt (schmale Fenster/viele Tags).
+- **Verschlüsselung als eigenes, kleines Modul** (`security/crypto.py`,
+  Fernet) statt Inline-Code in `settings_service.py` – `decrypt()` liefert
+  bewusst `None` statt einer Exception bei falschem/fehlendem Secret, damit
+  ein nicht mehr entschlüsselbarer gespeicherter Key als sauberer
+  `db_invalid`-Status behandelt wird statt eines 500ers (siehe Briefing:
+  "geht das Secret verloren, muss der Key neu eingegeben werden").
+- **Kein Klartext-Key jemals im Response-Body** – `AppSettingsRead` enthält
+  ausschließlich `claude_api_key_status` + eine maskierte Kurzform
+  (`sk-ant-…xxxx`), auch direkt nach dem Speichern eines neuen Keys.
+- **Leerer String bei `claude_api_key` im PATCH = "gespeicherten Key
+  entfernen"** (fällt zurück auf `.env`), fehlendes Feld = unverändert
+  lassen – dieselbe `model_fields_set`-Unterscheidung wie bei den anderen
+  PATCH-Endpunkten, hier zusätzlich für den Spezialfall "auf null setzen
+  bedeutet etwas anderes als weglassen".
+- **`claude_client._resolve_api_key()`/Modellwahl lesen jetzt live aus der
+  DB** (`settings_service.resolve_effective_claude_api_key/_model`) statt
+  nur aus `.env` (Schritt 5-Platzhalter) – Reihenfolge wie im Briefing:
+  DB-Key zuerst, `.env`-Key als Fallback; ein nicht entschlüsselbarer
+  DB-Key zählt dabei wie "kein Key vorhanden", nicht wie ein harter Fehler.
+- **`fusion_verfahren` in der Settings-UI bewusst nur informativ angezeigt
+  (deaktiviertes Feld), nicht editierbar** – aktuell existiert einzig
+  Reciprocal Rank Fusion als Implementierung; ein editierbares Auswahlfeld
+  ohne zweite Implementierung dahinter würde eine nicht vorhandene
+  Funktionalität vortäuschen.
+- **Kein automatischer Reindex-Hinweis/-Button bei geänderten Embedding-/
+  Chunking-Settings in Schritt 13** – die dafür nötige Blue/Green-
+  Neuindexierung (siehe Briefing) ist bewusst ein eigenständiges, noch
+  ausstehendes Stück Funktionalität; die Settings-UI weist stattdessen nur
+  im Hilfetext darauf hin, dass Änderungen sich nicht auf bereits aktive
+  Indizes auswirken.
+- **Genereller Testisolations-Fix:** `tests/conftest.py` wechselt das
+  Arbeitsverzeichnis der `test_settings`-Fixture jetzt per
+  `monkeypatch.chdir(tmp_path)` in ein leeres Verzeichnis. Vorher konnte ein
+  reales `backend/.env` (z. B. mit einem echten Claude-Key oder einem
+  individuell gesetzten `CLAUDE_MODEL_DEFAULT` für die lokale Dev-Nutzung)
+  in jedes Testfeld durchsickern, das ein Test nicht explizit selbst setzt –
+  das ist bereits zweimal als echtes Leck aufgefallen (unbeabsichtigter
+  echter API-Call in einem Test, ein Modell-Settings-Test schlug lokal fehl).
+  Jetzt sehen Tests ausschließlich Klassen-Defaults + explizit gesetzte
+  Env-Vars, nie die tatsächliche `.env`-Datei.
 
 ## Persistenzstruktur
 

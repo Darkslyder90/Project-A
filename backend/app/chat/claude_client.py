@@ -4,10 +4,10 @@ from dataclasses import dataclass
 import anthropic
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.core.exceptions import AppError
 from app.db.models.api_usage_log import ApiUsageLog
 from app.db.models.enums import ApiUsagePurpose
+from app.services.settings_service import resolve_effective_claude_api_key, resolve_effective_claude_model
 
 DEFAULT_MAX_TOKENS = 4096
 
@@ -29,18 +29,21 @@ class ClaudeCallResult:
     model: str
 
 
-def _resolve_api_key() -> str:
-    """Schritt 5: ausschliesslich der optionale .env-Fallback-Key. Ein in der
-    DB gespeicherter, verschluesselter Key (samt Fernet-Verschluesselung)
-    kommt erst mit der vollen Settings-Verwaltung in Schritt 13 dazu - dann
-    Reihenfolge DB-Key zuerst, dieser .env-Key als Fallback.
+def _resolve_api_key(db: Session) -> str:
+    """Reihenfolge wie im Briefing beschrieben: verschluesselter DB-Key
+    (Settings-UI, Schritt 13) zuerst, sonst optionaler .env-Fallback-Key.
+    Ein gespeicherter Key, der nicht entschluesselt werden kann (fehlendes/
+    geaendertes SETTINGS_ENCRYPTION_KEY), zaehlt wie "kein Key vorhanden" -
+    verstaendliche Fehlermeldung statt Absturz.
     """
-    settings = get_settings()
-    if not settings.claude_api_key:
+    api_key = resolve_effective_claude_api_key(db)
+    if not api_key:
         raise ClaudeUnavailableError(
-            "Kein Claude-API-Key konfiguriert. Bitte CLAUDE_API_KEY in der .env setzen."
+            "Kein Claude-API-Key konfiguriert (oder der gespeicherte Key kann nicht "
+            "entschluesselt werden). Bitte in den Einstellungen einen Key hinterlegen "
+            "oder CLAUDE_API_KEY in der .env setzen."
         )
-    return settings.claude_api_key
+    return api_key
 
 
 def call_claude(
@@ -57,10 +60,9 @@ def call_claude(
     siehe Briefing Datenschutz-Prinzip) und wandelt SDK-Fehler in eine saubere
     ClaudeUnavailableError um, statt die App abstuerzen zu lassen.
     """
-    settings = get_settings()
-    api_key = _resolve_api_key()
+    api_key = _resolve_api_key(db)
     client = anthropic.Anthropic(api_key=api_key)
-    model = settings.claude_model_default
+    model = resolve_effective_claude_model(db)
 
     start = time.monotonic()
     try:

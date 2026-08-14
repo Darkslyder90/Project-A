@@ -18,9 +18,58 @@
 
 .backend-status-row {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 0.75rem;
   margin-bottom: 1rem;
   font-size: 0.8rem;
+}
+
+.status-ok {
+  color: var(--color-ok);
+  font-weight: 600;
+}
+
+.settings-section {
+  margin: 1.5rem 0;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-section h2 {
+  margin-bottom: 0.25rem;
+}
+
+.settings-section .form-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.settings-section input[type='text'],
+.settings-section input[type='password'],
+.settings-section input[type='number'] {
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text);
+  font-family: inherit;
+}
+
+.settings-section input[type='text']:disabled {
+  color: var(--color-text-muted);
+}
+
+.usage-summary {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 
 .backend-badge-ok {

@@ -185,6 +185,44 @@ export type MeetingUpdateInput = {
   document_id?: number | null
 }
 
+export type ApiKeyStatus = 'db' | 'db_invalid' | 'env' | 'none'
+
+export type AppSettings = {
+  claude_api_key_status: ApiKeyStatus
+  claude_api_key_masked: string | null
+  claude_model: string | null
+  effective_claude_model: string
+  embedding_model_name: string
+  candidate_k_vector: number
+  candidate_k_keyword: number
+  final_k: number
+  chunk_ziel_tokens: number
+  chunk_overlap_tokens: number
+  fusion_verfahren: string
+}
+
+export type AppSettingsUpdateInput = {
+  claude_api_key?: string
+  claude_model?: string | null
+  embedding_model_name?: string
+  candidate_k_vector?: number
+  candidate_k_keyword?: number
+  final_k?: number
+  chunk_ziel_tokens?: number
+  chunk_overlap_tokens?: number
+}
+
+export type UsagePeriodSummary = {
+  anfragen: number
+  tokens: number
+}
+
+export type UsageSummary = {
+  heute: UsagePeriodSummary
+  woche: UsagePeriodSummary
+  monat: UsagePeriodSummary
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -351,4 +389,9 @@ export const api = {
     request<Meeting>(`/api/projects/${projectId}/meetings/${meetingId}/participants/${personId}`, {
       method: 'DELETE',
     }),
+
+  getSettings: () => request<AppSettings>('/api/settings'),
+  updateSettings: (input: AppSettingsUpdateInput) =>
+    request<AppSettings>('/api/settings', { method: 'PATCH', body: JSON.stringify(input) }),
+  getUsageSummary: () => request<UsageSummary>('/api/settings/usage'),
 }

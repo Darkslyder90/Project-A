@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { ProjectHome } from './pages/ProjectHome'
 import { ProjectsPage } from './pages/ProjectsPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { useActiveProjectId } from './state/activeProject'
 
 function BackendStatusBadge() {
@@ -24,14 +25,20 @@ function BackendStatusBadge() {
 
 function App() {
   const [activeProjectId, setActiveProjectId] = useActiveProjectId()
+  const [showSettings, setShowSettings] = useState(false)
 
   return (
     <main className="app-shell">
       <div className="backend-status-row">
+        <button className="link-button" onClick={() => setShowSettings(true)}>
+          Einstellungen
+        </button>
         <BackendStatusBadge />
       </div>
 
-      {activeProjectId === null ? (
+      {showSettings ? (
+        <SettingsPage onBack={() => setShowSettings(false)} />
+      ) : activeProjectId === null ? (
         <ProjectsPage onSelect={setActiveProjectId} />
       ) : (
         <ProjectHome projectId={activeProjectId} onSwitch={() => setActiveProjectId(null)} />

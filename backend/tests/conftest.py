@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
@@ -23,6 +24,16 @@ def test_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     # embedder.py - Prozess-weite Singletons), garantiert dieselbe,
     # testisolierte Konfiguration sieht statt zweier auseinanderlaufender
     # Settings-Instanzen.
+    #
+    # WICHTIG: Settings.model_config nutzt env_file=".env", relativ zum
+    # aktuellen Arbeitsverzeichnis - liegt dort ein echtes backend/.env (fuer
+    # die lokale Dev-Nutzung, z. B. ein echter Claude-Key), wuerde JEDES Feld,
+    # das ein Test nicht explizit ueberschreibt, still von dort einfliessen
+    # (schon zweimal als echtes Leck aufgefallen: Claude-Key, dann
+    # CLAUDE_MODEL_DEFAULT). chdir(tmp_path) sorgt dafuer, dass ".env" relativ
+    # zum neuen cwd nirgendwo existiert - Tests sehen dann ausschliesslich
+    # Klassen-Defaults + explizit gesetzte Env-Vars, nie die echte .env-Datei.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("ENV", "test")
     monkeypatch.setenv("EMBEDDING_MODEL_CACHE_DIR_OVERRIDE", str(_SHARED_EMBEDDING_CACHE))
@@ -31,6 +42,10 @@ def test_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     # Chat-Tests ohnehin gemockt (siehe tests/test_chat.py) - es geht hier nur
     # nie ein echter Request raus.
     monkeypatch.setenv("CLAUDE_API_KEY", "test-fake-key")
+    # Frischer Fernet-Key pro Test (siehe Schritt 13: Settings-UI verschluesselt
+    # einen in der DB gespeicherten Claude-Key damit) - isoliert wie alles
+    # andere in test_settings, kein test haengt vom Zustand eines anderen ab.
+    monkeypatch.setenv("SETTINGS_ENCRYPTION_KEY", Fernet.generate_key().decode("utf-8"))
     get_settings.cache_clear()
     yield get_settings()
     get_settings.cache_clear()
