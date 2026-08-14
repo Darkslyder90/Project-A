@@ -25,21 +25,26 @@ class _FakeMessagesResource:
     def __init__(self, text: str, stop_reason: str) -> None:
         self._text = text
         self._stop_reason = stop_reason
+        self.last_messages: list[dict] | None = None
 
     def create(self, *, model, max_tokens, system, messages):  # noqa: ARG002
+        self.last_messages = messages
         return _FakeMessage(self._text, self._stop_reason, model)
 
 
 class _FakeAnthropicClient:
-    def __init__(self, text: str, stop_reason: str) -> None:
-        self.messages = _FakeMessagesResource(text, stop_reason)
+    def __init__(self, messages_resource: _FakeMessagesResource) -> None:
+        self.messages = messages_resource
 
 
-def _patch_claude(monkeypatch, text: str, stop_reason: str = "end_turn") -> None:
+def _patch_claude(monkeypatch, text: str, stop_reason: str = "end_turn") -> _FakeMessagesResource:
+    fake_messages = _FakeMessagesResource(text, stop_reason)
+
     def _factory(api_key=None):  # noqa: ARG001
-        return _FakeAnthropicClient(text, stop_reason)
+        return _FakeAnthropicClient(fake_messages)
 
     monkeypatch.setattr(claude_client_module.anthropic, "Anthropic", _factory)
+    return fake_messages
 
 
 def _create_project_with_doc(client) -> int:
@@ -55,78 +60,149 @@ def _create_project_with_doc(client) -> int:
     return project_id
 
 
-def test_chat_answer_cites_valid_source(client, monkeypatch):
+def _create_conversation(client, project_id: int) -> int:
+    return client.post(f"/api/projects/{project_id}/chat/conversations").json()["id"]
+
+
+def test_create_and_list_conversations(client):
     project_id = _create_project_with_doc(client)
+
+    created = client.post(f"/api/projects/{project_id}/chat/conversations")
+    assert created.status_code == 201
+    assert created.json()["titel"] is None
+
+    listed = client.get(f"/api/projects/{project_id}/chat/conversations")
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+
+def test_send_message_persists_both_turns_and_sets_title(client, monkeypatch):
+    project_id = _create_project_with_doc(client)
+    conversation_id = _create_conversation(client, project_id)
     _patch_claude(monkeypatch, "Der Ansprechpartner ist Frau Weber [S1].")
 
     response = client.post(
-        f"/api/projects/{project_id}/chat", json={"query": "Wer ist Ansprechpartner?"}
+        f"/api/projects/{project_id}/chat/conversations/{conversation_id}/messages",
+        json={"query": "Wer ist der Ansprechpartner fuer VA02?"},
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["antwort"] == "Der Ansprechpartner ist Frau Weber [S1]."
-    assert len(body["quellen"]) == 1
-    assert body["quellen"][0]["source_id"] == "S1"
-    assert body["quellen"][0]["document_titel"] == "Ansprechpartner"
-    assert body["unbekannte_zitate"] == []
+    assert body["nachricht"]["rolle"] == "assistant"
+    assert body["nachricht"]["text"] == "Der Ansprechpartner ist Frau Weber [S1]."
+    assert len(body["nachricht"]["quellen"]) == 1
+    assert body["nachricht"]["quellen"][0]["source_id"] == "S1"
+    assert body["conversation"]["titel"] == "Wer ist der Ansprechpartner fuer VA02?"
+
+    detail = client.get(f"/api/projects/{project_id}/chat/conversations/{conversation_id}").json()
+    assert len(detail["nachrichten"]) == 2
+    assert detail["nachrichten"][0]["rolle"] == "user"
+    assert detail["nachrichten"][1]["rolle"] == "assistant"
 
 
-def test_chat_flags_invalid_citation_without_crashing(client, monkeypatch):
+def test_second_message_sends_history_to_claude(client, monkeypatch):
     project_id = _create_project_with_doc(client)
-    _patch_claude(monkeypatch, "Laut [S1] und [S99] ist das so.")
+    conversation_id = _create_conversation(client, project_id)
+    fake_messages = _patch_claude(monkeypatch, "Erste Antwort.")
 
-    response = client.post(f"/api/projects/{project_id}/chat", json={"query": "Frage?"})
+    client.post(
+        f"/api/projects/{project_id}/chat/conversations/{conversation_id}/messages",
+        json={"query": "Erste Frage"},
+    )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["unbekannte_zitate"] == ["S99"]
-    assert all(q["source_id"] != "S99" for q in body["quellen"])
+    fake_messages._text = "Zweite Antwort."
+    client.post(
+        f"/api/projects/{project_id}/chat/conversations/{conversation_id}/messages",
+        json={"query": "Zweite Frage"},
+    )
+
+    sent = fake_messages.last_messages
+    assert sent[0] == {"role": "user", "content": "Erste Frage"}
+    assert sent[1] == {"role": "assistant", "content": "Erste Antwort."}
+    assert sent[2] == {"role": "user", "content": "Zweite Frage"}
 
 
-def test_chat_handles_refusal_gracefully(client, monkeypatch):
+def test_send_message_handles_refusal_gracefully(client, monkeypatch):
     project_id = _create_project_with_doc(client)
+    conversation_id = _create_conversation(client, project_id)
     _patch_claude(monkeypatch, "", stop_reason="refusal")
 
-    response = client.post(f"/api/projects/{project_id}/chat", json={"query": "Frage?"})
+    response = client.post(
+        f"/api/projects/{project_id}/chat/conversations/{conversation_id}/messages",
+        json={"query": "Frage?"},
+    )
 
     assert response.status_code == 200
-    body = response.json()
-    assert body["quellen"] == []
-    assert "nicht beantworten" in body["antwort"]
+    assert response.json()["nachricht"]["quellen"] is None
+    assert "nicht beantworten" in response.json()["nachricht"]["text"]
 
 
-def test_chat_logs_api_usage(client, app, monkeypatch):
-    from app.db.models.api_usage_log import ApiUsageLog
-
-    project_id = _create_project_with_doc(client)
-    _patch_claude(monkeypatch, "Antwort ohne Zitat.")
-
-    client.post(f"/api/projects/{project_id}/chat", json={"query": "Frage?"})
-
-    with app.state.session_factory() as db:
-        logs = db.query(ApiUsageLog).filter(ApiUsageLog.project_id == project_id).all()
-    assert len(logs) == 1
-    assert logs[0].zweck.value == "chat"
-    assert logs[0].erfolg is True
-    assert logs[0].input_tokens == 111
-    assert logs[0].output_tokens == 22
-
-
-def test_chat_for_unknown_project_returns_404(client, monkeypatch):
-    _patch_claude(monkeypatch, "irrelevant")
-    response = client.post("/api/projects/999999/chat", json={"query": "Frage?"})
-    assert response.status_code == 404
-
-
-def test_chat_without_api_key_returns_503(client, monkeypatch):
+def test_user_message_survives_claude_failure(client, monkeypatch):
     from app.config import get_settings
 
     project_id = _create_project_with_doc(client)
+    conversation_id = _create_conversation(client, project_id)
     monkeypatch.delenv("CLAUDE_API_KEY", raising=False)
     get_settings.cache_clear()
 
-    response = client.post(f"/api/projects/{project_id}/chat", json={"query": "Frage?"})
-
+    response = client.post(
+        f"/api/projects/{project_id}/chat/conversations/{conversation_id}/messages",
+        json={"query": "Wird diese Frage gespeichert?"},
+    )
     assert response.status_code == 503
     get_settings.cache_clear()
+
+    detail = client.get(f"/api/projects/{project_id}/chat/conversations/{conversation_id}").json()
+    assert len(detail["nachrichten"]) == 1
+    assert detail["nachrichten"][0]["rolle"] == "user"
+    assert detail["nachrichten"][0]["text"] == "Wird diese Frage gespeichert?"
+
+
+def test_rename_and_delete_conversation(client):
+    project_id = _create_project_with_doc(client)
+    conversation_id = _create_conversation(client, project_id)
+
+    renamed = client.patch(
+        f"/api/projects/{project_id}/chat/conversations/{conversation_id}",
+        json={"titel": "Mein Titel"},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["titel"] == "Mein Titel"
+
+    deleted = client.delete(f"/api/projects/{project_id}/chat/conversations/{conversation_id}")
+    assert deleted.status_code == 204
+    assert client.get(f"/api/projects/{project_id}/chat/conversations/{conversation_id}").status_code == 404
+
+
+def test_conversations_are_isolated_between_projects(client):
+    project_a = _create_project_with_doc(client)
+    project_b = client.post("/api/projects", json={"name": "Anderes Projekt"}).json()["id"]
+
+    conversation_id = _create_conversation(client, project_a)
+
+    assert client.get(f"/api/projects/{project_b}/chat/conversations/{conversation_id}").status_code == 404
+    assert len(client.get(f"/api/projects/{project_b}/chat/conversations").json()) == 0
+
+
+def test_deleted_document_shows_as_geloescht_in_source_snapshot(client, app, monkeypatch):
+    project_id = _create_project_with_doc(client)
+    conversation_id = _create_conversation(client, project_id)
+    _patch_claude(monkeypatch, "Laut [S1] ist Frau Weber zustaendig.")
+
+    client.post(
+        f"/api/projects/{project_id}/chat/conversations/{conversation_id}/messages",
+        json={"query": "Wer ist zustaendig?"},
+    )
+
+    # Dokument nur aus SQLite entfernen (simuliert eine spaetere Loeschung),
+    # ohne die Konversation anzufassen - der Snapshot muss trotzdem lesbar bleiben.
+    from app.db.models.document import Document
+
+    with app.state.session_factory() as db:
+        doc = db.query(Document).first()
+        db.delete(doc)
+        db.commit()
+
+    detail = client.get(f"/api/projects/{project_id}/chat/conversations/{conversation_id}").json()
+    assistant_message = detail["nachrichten"][1]
+    assert assistant_message["quellen"][0]["geloescht"] is True

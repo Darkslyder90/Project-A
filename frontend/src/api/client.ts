@@ -46,19 +46,42 @@ export type RetrievalHit = {
   abschnitt: string | null
 }
 
-export type ChatSource = {
+export type ChatSourceSnapshot = {
   source_id: string
   document_id: number
   document_titel: string
   dokumentdatum: string | null
   abschnitt: string | null
-  text: string
+  text_ausschnitt: string
+  geloescht: boolean
 }
 
-export type ChatResponse = {
-  antwort: string
-  quellen: ChatSource[]
-  unbekannte_zitate: string[]
+export type ChatRole = 'user' | 'assistant'
+
+export type ChatMessage = {
+  id: number
+  conversation_id: number
+  rolle: ChatRole
+  text: string
+  quellen: ChatSourceSnapshot[] | null
+  erstellt_am: string
+}
+
+export type ChatConversation = {
+  id: number
+  project_id: number
+  titel: string | null
+  erstellt_am: string
+  zuletzt_aktualisiert_am: string
+}
+
+export type ChatConversationDetail = ChatConversation & {
+  nachrichten: ChatMessage[]
+}
+
+export type SendMessageResponse = {
+  conversation: ChatConversation
+  nachricht: ChatMessage
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -99,9 +122,26 @@ export const api = {
       body: JSON.stringify({ query, top_k: topK }),
     }),
 
-  askChat: (projectId: number, query: string) =>
-    request<ChatResponse>(`/api/projects/${projectId}/chat`, {
-      method: 'POST',
-      body: JSON.stringify({ query }),
+  listConversations: (projectId: number) =>
+    request<ChatConversation[]>(`/api/projects/${projectId}/chat/conversations`),
+  createConversation: (projectId: number) =>
+    request<ChatConversation>(`/api/projects/${projectId}/chat/conversations`, { method: 'POST' }),
+  getConversation: (projectId: number, conversationId: number) =>
+    request<ChatConversationDetail>(
+      `/api/projects/${projectId}/chat/conversations/${conversationId}`,
+    ),
+  renameConversation: (projectId: number, conversationId: number, titel: string) =>
+    request<ChatConversation>(
+      `/api/projects/${projectId}/chat/conversations/${conversationId}`,
+      { method: 'PATCH', body: JSON.stringify({ titel }) },
+    ),
+  deleteConversation: (projectId: number, conversationId: number) =>
+    request<void>(`/api/projects/${projectId}/chat/conversations/${conversationId}`, {
+      method: 'DELETE',
     }),
+  sendMessage: (projectId: number, conversationId: number, query: string) =>
+    request<SendMessageResponse>(
+      `/api/projects/${projectId}/chat/conversations/${conversationId}/messages`,
+      { method: 'POST', body: JSON.stringify({ query }) },
+    ),
 }

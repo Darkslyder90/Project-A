@@ -1,31 +1,18 @@
-from dataclasses import dataclass
-
 from sqlalchemy.orm import Session
 
-from app.chat.claude_client import call_claude
-from app.chat.prompt_builder import PromptSource, build_system_prompt
-from app.chat.source_validator import extract_cited_source_ids, find_invalid_citations
+from app.chat.prompt_builder import PromptSource
 from app.db.models.chunk import Chunk
 from app.db.models.document import Document
-from app.db.models.enums import ApiUsagePurpose
 from app.retrieval.vector_search import vector_search
-from app.services.project_service import get_project
-from app.services.settings_service import get_app_settings
-
-_UNZUREICHEND = "Dazu finde ich in den Projektdaten keine ausreichenden Informationen."
 
 
-@dataclass
-class ChatAnswer:
-    antwort: str
-    quellen: list[PromptSource]
-    unbekannte_zitate: list[str]
-
-
-def _build_sources(db: Session, project_id: int, query: str, top_k: int) -> list[PromptSource]:
-    # Schritt 5: reine Vektorsuche (Hybrid Retrieval mit FTS5 kommt Schritt 10) -
-    # final_k wird hier direkt als top_k der Vektorsuche verwendet, da es noch
-    # keine Fusion mehrerer Suchpfade gibt.
+def build_sources(db: Session, project_id: int, query: str, top_k: int) -> list[PromptSource]:
+    """Fuehrt die Retrieval-Anfrage fuer eine Chat-Frage aus und baut daraus die
+    serverseitigen PromptSource-Objekte (S1..Sn), die Claude als abgegrenzten
+    <dokumente>-Block sieht. Schritt 5/6: reine Vektorsuche (Hybrid Retrieval
+    mit FTS5 kommt Schritt 10) - final_k wird direkt als top_k der Vektorsuche
+    verwendet, da es noch keine Fusion mehrerer Suchpfade gibt.
+    """
     hits = vector_search(db, project_id, query, top_k)
     if not hits:
         return []
@@ -55,33 +42,3 @@ def _build_sources(db: Session, project_id: int, query: str, top_k: int) -> list
             )
         )
     return sources
-
-
-def ask(db: Session, project_id: int, query: str) -> ChatAnswer:
-    get_project(db, project_id)  # 404, falls Projekt nicht existiert
-
-    app_settings = get_app_settings(db)
-    sources = _build_sources(db, project_id, query, app_settings.final_k)
-
-    system_prompt = build_system_prompt(sources)
-    result = call_claude(
-        db,
-        project_id=project_id,
-        system=system_prompt,
-        messages=[{"role": "user", "content": query}],
-        zweck=ApiUsagePurpose.CHAT,
-    )
-
-    if result.stop_reason == "refusal":
-        return ChatAnswer(
-            antwort="Claude konnte diese Anfrage leider nicht beantworten.",
-            quellen=[],
-            unbekannte_zitate=[],
-        )
-
-    valid_ids = {s.source_id for s in sources}
-    invalid = find_invalid_citations(result.text, valid_ids)
-    cited_ids = extract_cited_source_ids(result.text) & valid_ids
-    used_sources = [s for s in sources if s.source_id in cited_ids]
-
-    return ChatAnswer(antwort=result.text, quellen=used_sources, unbekannte_zitate=invalid)

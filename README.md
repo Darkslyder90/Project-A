@@ -20,12 +20,14 @@ Aktuell abgeschlossen:
 4. ✅ Retrieval-Test ohne Claude (reine Vektorsuche über Chroma, projekt- und
    index-version-isoliert, mit UI zum manuellen Ausprobieren)
 5. ✅ Claude-Chat mit validierten Quellen (Source-IDs, Prompt-Injection-Schutz,
-   strikte Grounding-Regel, Refusal-Handling, API-Nutzungsprotokollierung –
-   noch ohne persistenten Konversationsverlauf, siehe Schritt 6)
+   strikte Grounding-Regel, Refusal-Handling, API-Nutzungsprotokollierung)
+6. ✅ Persistente Chat-Konversationen (mehrere Konversationen pro Projekt,
+   Umbenennen/Löschen, Quellen-Snapshot mit Live-Erkennung gelöschter
+   Dokumente, Nutzer-Nachricht bleibt auch bei Claude-Ausfall erhalten)
 
-Alle weiteren Schritte (persistente Konversationen, Datei-Upload, Bildanalyse,
-Personen/Tasks/Meetings, Übersichtsseiten, Settings, Export/Import,
-Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
+Alle weiteren Schritte (Datei-Upload, Bildanalyse, Personen/Tasks/Meetings,
+Übersichtsseiten, Settings, Export/Import, Backup/Update, Docker/Prod-Deployment)
+folgen schrittweise.
 
 ## Lokale Entwicklung
 
@@ -149,6 +151,22 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   der DB gelesen und der Anthropic-`messages`-Liste vorangestellt werden.
 - **Retrieval für den Chat nutzt `final_k` direkt als Top-K der Vektorsuche**
   (noch kein `candidate_k`/Fusion, da Hybrid Retrieval erst Schritt 10 kommt).
+- **Nutzer-Nachricht wird vor dem Claude-Aufruf committed** (Schritt 6): Schlägt
+  `call_claude` fehl (z. B. kein API-Key), bleibt die gestellte Frage trotzdem
+  in der Konversation erhalten – nur die Assistant-Antwort fehlt dann. Kein
+  Rollback der Nutzer-Nachricht bei einem Claude-Fehler, da das Verlieren der
+  gestellten Frage die schlechtere UX wäre als eine unbeantwortete Frage in
+  der Historie.
+- **Jede Chat-Anfrage retrievt frisch** (kein Zwischenspeichern alter Quellen):
+  der Konversationsverlauf wird nur als Text an Claude mitgeschickt (Kontext),
+  nie erneut durchsucht – passend zum Briefing-Grundsatz "Chatverlauf ist kein
+  eigenständiger Wissensspeicher". Der System-Prompt weist Claude zusätzlich
+  darauf hin, dass Source-IDs aus früheren Antworten im Verlauf sich auf andere
+  Dokumente beziehen können als die in der aktuellen Antwort neu vergebenen.
+- **Quellen-Snapshot in `ChatMessage.quellen`** speichert `dokumentdatum` als
+  ISO-String (JSON-Spalte) – Pydantic parst das beim Lesen automatisch zurück
+  in ein `date`-Feld. `geloescht` wird nicht gespeichert, sondern beim Lesen
+  live berechnet (Document-Tabelle wird pro Snapshot auf Existenz geprüft).
 
 ## Persistenzstruktur
 
