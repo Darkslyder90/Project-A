@@ -14,11 +14,11 @@ Umsetzung erfolgt in vertikalen, lauffähigen Schritten (siehe Briefing).
 Aktuell abgeschlossen:
 
 1. ✅ Grundstruktur, DB-Modelle, Alembic-Migrationen, Healthcheck
+2. ✅ Projektverwaltung (anlegen, auswählen, umbenennen/Beschreibung ändern, löschen)
 
-Alle weiteren Schritte (Projektverwaltung, Dokumente/Chunking/Embedding,
-Retrieval, Chat, Datei-Upload, Bildanalyse, Personen/Tasks/Meetings,
-Übersichtsseiten, Settings, Export/Import, Backup/Update, Docker/Prod-Deployment)
-folgen schrittweise.
+Alle weiteren Schritte (Dokumente/Chunking/Embedding, Retrieval, Chat,
+Datei-Upload, Bildanalyse, Personen/Tasks/Meetings, Übersichtsseiten, Settings,
+Export/Import, Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
 
 ## Lokale Entwicklung
 

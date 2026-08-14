@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes.health import router as health_router
+from app.api.routes.projects import router as projects_router
 from app.config import Settings, get_settings
+from app.core.exceptions import AppError
 from app.core.logging import setup_logging
 from app.db.session import create_engine_and_session_factory
 
@@ -30,7 +33,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.exception_handler(AppError)
+    def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
     app.include_router(health_router, tags=["health"])
+    app.include_router(projects_router)
 
     return app
 

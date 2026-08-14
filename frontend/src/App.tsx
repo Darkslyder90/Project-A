@@ -1,46 +1,41 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import { ProjectHome } from './pages/ProjectHome'
+import { ProjectsPage } from './pages/ProjectsPage'
+import { useActiveProjectId } from './state/activeProject'
 
-type HealthResponse = {
-  status: 'ok' | 'degraded'
-  checks: Record<string, string>
-}
-
-function App() {
-  const [health, setHealth] = useState<HealthResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+function BackendStatusBadge() {
+  const [ok, setOk] = useState<boolean | null>(null)
 
   useEffect(() => {
     fetch('/health')
       .then((res) => res.json())
-      .then(setHealth)
-      .catch(() => setError('Backend nicht erreichbar'))
+      .then((body) => setOk(body.status === 'ok'))
+      .catch(() => setOk(false))
   }, [])
+
+  if (ok === null) return null
+  return (
+    <span className={ok ? 'backend-badge-ok' : 'backend-badge-error'} title="Backend-Status">
+      {ok ? '● Backend verbunden' : '● Backend nicht erreichbar'}
+    </span>
+  )
+}
+
+function App() {
+  const [activeProjectId, setActiveProjectId] = useActiveProjectId()
 
   return (
     <main className="app-shell">
-      <h1>Project-A</h1>
-      <p className="subtitle">Persönlicher Projekt-Assistent</p>
+      <div className="backend-status-row">
+        <BackendStatusBadge />
+      </div>
 
-      <section className="status-card">
-        <h2>Backend-Status</h2>
-        {error && <p className="status-error">{error}</p>}
-        {!error && !health && <p>Prüfe Verbindung …</p>}
-        {health && (
-          <>
-            <p className={health.status === 'ok' ? 'status-ok' : 'status-error'}>
-              {health.status === 'ok' ? 'Betriebsbereit' : 'Eingeschränkt'}
-            </p>
-            <ul>
-              {Object.entries(health.checks).map(([name, value]) => (
-                <li key={name}>
-                  {name}: {value}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
+      {activeProjectId === null ? (
+        <ProjectsPage onSelect={setActiveProjectId} />
+      ) : (
+        <ProjectHome projectId={activeProjectId} onSwitch={() => setActiveProjectId(null)} />
+      )}
     </main>
   )
 }

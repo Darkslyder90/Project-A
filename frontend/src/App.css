@@ -1,7 +1,7 @@
 .app-shell {
   max-width: 640px;
   margin: 0 auto;
-  padding: 3rem 1.5rem;
+  padding: 2rem 1.5rem 3rem;
 }
 
 .subtitle {
@@ -9,28 +9,132 @@
   margin-top: -0.5rem;
 }
 
-.status-card {
-  background-color: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 1.25rem 1.5rem;
-  margin-top: 2rem;
-}
-
-.status-ok {
-  color: var(--color-ok);
-  font-weight: 600;
-}
-
 .status-error {
   color: var(--color-error);
   font-weight: 600;
 }
 
-.status-card ul {
+.backend-status-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+}
+
+.backend-badge-ok {
+  color: var(--color-ok);
+}
+
+.backend-badge-error {
+  color: var(--color-error);
+}
+
+/* --- Projects page --- */
+
+.create-project-form {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+  flex-wrap: wrap;
+}
+
+.create-project-form input {
+  flex: 1;
+  min-width: 160px;
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text);
+}
+
+button {
+  background-color: var(--color-accent);
+  color: #0b0d10;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.link-button {
+  background: none;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  padding: 0.25rem 0.5rem;
+}
+
+button.link-button:hover {
+  color: var(--color-error);
+}
+
+button.danger {
+  background-color: var(--color-error);
+  color: #1a0d10;
+}
+
+.project-list {
   list-style: none;
   padding: 0;
-  margin: 0.5rem 0 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.project-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem 0.25rem 1rem;
+  gap: 1rem;
+}
+
+.project-select {
+  flex: 1;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0.75rem 0;
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.project-name {
+  font-weight: 600;
+}
+
+.project-desc {
+  font-size: 0.85rem;
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.confirm-delete {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* --- Project home --- */
+
+.project-home-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
 }
