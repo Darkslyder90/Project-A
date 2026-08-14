@@ -33,5 +33,6 @@ class DocumentRead(BaseModel):
     status: DocumentStatus
     fehlermeldung: str | None
     dokumentdatum: date | None
+    dateiname: str | None
     erstellt_am: datetime
     aktualisiert_am: datetime

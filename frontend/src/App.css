@@ -145,6 +145,23 @@ button.danger {
   margin-top: 2rem;
 }
 
+.document-mode-switch {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.document-mode-switch .active {
+  background-color: var(--color-accent);
+  color: #0b0d10;
+}
+
+.document-mode-switch .link-button {
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
 .create-document-form {
   display: flex;
   flex-direction: column;

@@ -24,10 +24,14 @@ Aktuell abgeschlossen:
 6. ✅ Persistente Chat-Konversationen (mehrere Konversationen pro Projekt,
    Umbenennen/Löschen, Quellen-Snapshot mit Live-Erkennung gelöschter
    Dokumente, Nutzer-Nachricht bleibt auch bei Claude-Ausfall erhalten)
+7. ✅ Datei-Upload (PDF/DOCX/TXT/MD) + Textextraktion, Duplikatserkennung
+   (SHA-256, mit bewusstem "trotzdem hochladen"), sichere Dateipfade,
+   Datei-Download mit korrekten Headern – nutzt dieselbe synchrone
+   `process_document`-Pipeline wie manuelle Einträge (Schritt 3)
 
-Alle weiteren Schritte (Datei-Upload, Bildanalyse, Personen/Tasks/Meetings,
-Übersichtsseiten, Settings, Export/Import, Backup/Update, Docker/Prod-Deployment)
-folgen schrittweise.
+Alle weiteren Schritte (asynchrone Verarbeitung, Bildanalyse,
+Personen/Tasks/Meetings, Übersichtsseiten, Settings, Export/Import,
+Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
 
 ## Lokale Entwicklung
 
@@ -167,6 +171,28 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   ISO-String (JSON-Spalte) – Pydantic parst das beim Lesen automatisch zurück
   in ein `date`-Feld. `geloescht` wird nicht gespeichert, sondern beim Lesen
   live berechnet (Document-Tabelle wird pro Snapshot auf Existenz geprüft).
+- **Korrektur aus Schritt 1 (Bugfix in Schritt 7 entdeckt):** `Document` hatte
+  ursprünglich einen `UniqueConstraint` auf `(project_id, datei_hash)`. Das
+  widerspricht dem Briefing ("Upload wird gestoppt … mit Möglichkeit, bewusst
+  trotzdem fortzufahren") – ein bestätigtes Duplikat muss speicherbar sein.
+  Migration `931b876860b6` ersetzt den Unique-Constraint durch einen normalen
+  (nicht-eindeutigen) Index; die Duplikat-Warnung wird jetzt ausschließlich im
+  Service geprüft, nicht mehr über eine DB-Constraint erzwungen.
+- **Sichere Upload-Pfade ohne libmagic/python-magic:** Formatprüfung über
+  Dateiendungs-Allowlist + Magic-Byte-Sniffing (PDF: `%PDF-`, DOCX: ZIP-Header
+  `PK\x03\x04`, TXT/MD: gültiges UTF-8) statt einer zusätzlichen
+  Systemabhängigkeit, die unter Windows-Dev-Umgebungen unnötig kompliziert
+  wäre. Interne Speicherpfade (`uploads/<project-id>/<document-id>/original.<ext>`)
+  werden ausschließlich aus DB-IDs und der geprüften Endung gebildet – der
+  Original-Dateiname fließt nie in einen Dateisystempfad ein, sondern bleibt
+  reines Metadatum (`Document.dateiname`).
+- **DOCX-Überschriften werden bei der Extraktion in Markdown-Präfixe (`#`/`##`)
+  übersetzt**, damit der bestehende Struktur-Chunker (Schritt 3) DOCX-Gliederung
+  transparent mitnutzen kann, ohne einen eigenen DOCX-Chunker zu brauchen.
+- **`process_document()` extrahiert jetzt bei Bedarf selbst** (wenn `inhalt`
+  noch `None` ist und `original_dateipfad` gesetzt ist) – dieselbe Pipeline
+  bedient damit sowohl manuelle Einträge (Schritt 3, `inhalt` schon gesetzt)
+  als auch Datei-Uploads (Schritt 7), ohne Sonderfall-Code im Aufrufer.
 
 ## Persistenzstruktur
 

@@ -1,4 +1,6 @@
 import uuid
+from datetime import date
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,7 @@ from app.indexing.chroma_client import get_chroma_client, get_or_create_collecti
 from app.indexing.index_metadata_service import ensure_bootstrapped
 from app.ingestion.chunkers.dispatch import chunk_document
 from app.ingestion.embedding.embedder import get_embedder
+from app.ingestion.extractors.dispatch import extract_text
 
 
 def _mark_failed(db: Session, document: Document | None, message: str) -> None:
@@ -59,15 +62,27 @@ def process_document(db: Session, document_id: int) -> None:
     document.status = DocumentStatus.PROCESSING
     db.commit()
 
-    text = (document.inhalt or "").strip()
-    if not text:
-        _mark_failed(db, document, "Kein indexierbarer Inhalt vorhanden.")
-        return
-
     settings = get_settings()
     chroma_dir = str(settings.chroma_dir)
 
     try:
+        # Datei-Upload (Schritt 7): Inhalt liegt noch nicht vor, muss aus der
+        # Originaldatei extrahiert werden. Bei manueller Eingabe (Schritt 3)
+        # ist document.inhalt bereits gesetzt - dieser Block wird dann uebersprungen.
+        if document.inhalt is None and document.original_dateipfad:
+            extension = Path(document.original_dateipfad).suffix.lower()
+            absolute_path = settings.uploads_dir / document.original_dateipfad
+            extracted = extract_text(absolute_path, extension)
+            document.inhalt = extracted.text
+            if document.dokumentdatum is None:
+                document.dokumentdatum = extracted.dokumentdatum or date.today()
+            db.commit()
+
+        text = (document.inhalt or "").strip()
+        if not text:
+            _mark_failed(db, document, "Kein indexierbarer Inhalt vorhanden (Extraktion leer).")
+            return
+
         index_meta = ensure_bootstrapped(db, document.project_id)
 
         _cleanup_existing_chunks(

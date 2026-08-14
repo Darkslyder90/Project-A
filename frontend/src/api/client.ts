@@ -23,6 +23,7 @@ export type Document = {
   status: DocumentStatus
   fehlermeldung: string | null
   dokumentdatum: string | null
+  dateiname: string | null
   erstellt_am: string
   aktualisiert_am: string
 }
@@ -32,6 +33,14 @@ export type DocumentCreateInput = {
   titel: string
   inhalt: string
   dokumentdatum?: string | null
+}
+
+export type DocumentUploadInput = {
+  file: File
+  typ: DocumentType
+  titel?: string
+  dokumentdatum?: string
+  force?: boolean
 }
 
 export type RetrievalHit = {
@@ -84,6 +93,14 @@ export type SendMessageResponse = {
   nachricht: ChatMessage
 }
 
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
@@ -91,10 +108,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.detail ?? `Anfrage fehlgeschlagen (${response.status})`)
+    throw new ApiError(response.status, body?.detail ?? `Anfrage fehlgeschlagen (${response.status})`)
   }
   if (response.status === 204) {
     return undefined as T
+  }
+  return response.json() as Promise<T>
+}
+
+// Kein 'Content-Type'-Header hier - der Browser setzt bei FormData automatisch
+// die korrekte multipart/form-data-Boundary. Ein manueller JSON-Header wuerde
+// den Upload kaputt machen.
+async function requestForm<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(path, { method: 'POST', body: formData })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new ApiError(response.status, body?.detail ?? `Anfrage fehlgeschlagen (${response.status})`)
   }
   return response.json() as Promise<T>
 }
@@ -115,6 +144,17 @@ export const api = {
     request<Document>(`/api/projects/${projectId}/documents/${documentId}/reprocess`, {
       method: 'POST',
     }),
+  uploadDocument: (projectId: number, input: DocumentUploadInput) => {
+    const formData = new FormData()
+    formData.append('file', input.file)
+    formData.append('typ', input.typ)
+    if (input.titel) formData.append('titel', input.titel)
+    if (input.dokumentdatum) formData.append('dokumentdatum', input.dokumentdatum)
+    if (input.force) formData.append('force', 'true')
+    return requestForm<Document>(`/api/projects/${projectId}/documents/upload`, formData)
+  },
+  documentFileUrl: (projectId: number, documentId: number) =>
+    `/api/projects/${projectId}/documents/${documentId}/file`,
 
   testRetrieval: (projectId: number, query: string, topK = 5) =>
     request<RetrievalHit[]>(`/api/projects/${projectId}/retrieval-test`, {

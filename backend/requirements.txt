@@ -11,6 +11,10 @@ cryptography==46.0.3
 sentence-transformers==5.7.0
 chromadb==1.5.9
 
-# Schritt 5: Claude-Chat. Weitere Pakete (pypdf, python-docx, ...) kommen in
-# spaeteren vertikalen Schritten dazu, wenn sie tatsaechlich gebraucht werden.
+# Schritt 5: Claude-Chat.
 anthropic==0.122.0
+
+# Schritt 7: Datei-Upload + Textextraktion.
+pypdf==6.16.0
+python-docx==1.2.0
+python-multipart==0.0.32

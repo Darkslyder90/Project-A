@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -12,10 +12,14 @@ from app.db.models.enums import DocumentStatus, DocumentType
 
 class Document(Base):
     __tablename__ = "documents"
-    # Duplikatserkennung ist projektspezifisch (siehe Briefing Punkt 2), daher
-    # Index statt globaler Unique-Constraint - zwei Projekte duerfen dieselbe Datei
-    # unabhaengig voneinander enthalten.
-    __table_args__ = (UniqueConstraint("project_id", "datei_hash", name="uq_document_project_hash"),)
+    # Korrektur (Schritt 7): urspruenglich ein UniqueConstraint - das widerspricht
+    # aber dem Briefing ("Upload wird gestoppt ... mit Moeglichkeit, bewusst
+    # trotzdem fortzufahren"). Ein bewusst bestaetigtes Duplikat MUSS speicherbar
+    # sein, die Pruefung erfolgt daher rein im Service (document_service), hier
+    # nur ein normaler (nicht-eindeutiger) Index fuer schnelle Duplikat-Lookups.
+    __table_args__ = (
+        Index("ix_document_project_hash", "project_id", "datei_hash"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(

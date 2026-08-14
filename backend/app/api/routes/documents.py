@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, status
+from datetime import date
+
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.api.schemas.document import DocumentCreate, DocumentRead
+from app.db.models.enums import DocumentType
 from app.services import document_service
 
 router = APIRouter(prefix="/api/projects/{project_id}/documents", tags=["documents"])
@@ -25,9 +29,40 @@ def create_document(project_id: int, payload: DocumentCreate, db: Session = Depe
     )
 
 
+@router.post("/upload", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
+async def upload_document(
+    project_id: int,
+    file: UploadFile = File(...),
+    typ: DocumentType = Form(...),
+    titel: str | None = Form(default=None),
+    dokumentdatum: date | None = Form(default=None),
+    force: bool = Form(default=False),
+    db: Session = Depends(get_db),
+) -> DocumentRead:
+    content = await file.read()
+    return document_service.create_uploaded_document(
+        db,
+        project_id,
+        typ=typ,
+        titel=titel,
+        dokumentdatum=dokumentdatum,
+        original_filename=file.filename or "upload",
+        content=content,
+        force_duplicate=force,
+    )
+
+
 @router.get("/{document_id}", response_model=DocumentRead)
 def get_document(project_id: int, document_id: int, db: Session = Depends(get_db)) -> DocumentRead:
     return document_service.get_document(db, project_id, document_id)
+
+
+@router.get("/{document_id}/file")
+def download_document_file(
+    project_id: int, document_id: int, db: Session = Depends(get_db)
+) -> FileResponse:
+    path, media_type, filename = document_service.get_file_path(db, project_id, document_id)
+    return FileResponse(path=path, media_type=media_type, filename=filename)
 
 
 @router.post("/{document_id}/reprocess", response_model=DocumentRead)
