@@ -2,13 +2,18 @@ from pathlib import Path
 
 from app.core.exceptions import ValidationAppError
 
-# Erlaubte Formate fuer Schritt 7 (Textdokumente). Bilder kommen erst Schritt 9.
+# Erlaubte Formate: Textdokumente (Schritt 7) + Bilder (Schritt 9).
 _ALLOWED_EXTENSIONS: dict[str, str] = {
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".txt": "text/plain",
     ".md": "text/markdown",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
 }
+
+IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg"})
 
 
 def validate_extension(original_filename: str) -> str:
@@ -34,13 +39,18 @@ def looks_like_plausible_content(extension: str, content: bytes) -> bool:
     """Einfache Magic-Byte-Pruefung als Plausibilisierung (siehe Briefing:
     "MIME-Type und Dateiendung plausibilisieren") - bewusst ohne Abhaengigkeit
     von libmagic/python-magic (zusaetzliche Systemabhaengigkeit, gerade fuer
-    Windows-Dev-Umgebungen unnoetig kompliziert). PDF/DOCX haben verlaessliche
-    Datei-Signaturen; TXT/MD werden stattdessen auf gueltiges UTF-8 geprueft.
+    Windows-Dev-Umgebungen unnoetig kompliziert). PDF/DOCX/PNG/JPEG haben
+    verlaessliche Datei-Signaturen; TXT/MD werden stattdessen auf gueltiges
+    UTF-8 geprueft.
     """
     if extension == ".pdf":
         return content[:5] == b"%PDF-"
     if extension == ".docx":
         return content[:4] == b"PK\x03\x04"  # DOCX ist ein ZIP-Container
+    if extension == ".png":
+        return content[:8] == b"\x89PNG\r\n\x1a\n"
+    if extension in (".jpg", ".jpeg"):
+        return content[:3] == b"\xff\xd8\xff"
     if extension in (".txt", ".md"):
         try:
             content.decode("utf-8")

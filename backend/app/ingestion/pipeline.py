@@ -8,12 +8,13 @@ from app.config import get_settings
 from app.core.exceptions import NotFoundError
 from app.db.models.chunk import Chunk
 from app.db.models.document import Document
-from app.db.models.enums import DocumentStatus
+from app.db.models.enums import DocumentStatus, DocumentType
 from app.indexing.chroma_client import get_chroma_client, get_or_create_collection
 from app.indexing.index_metadata_service import ensure_bootstrapped
 from app.ingestion.chunkers.dispatch import chunk_document
 from app.ingestion.embedding.embedder import get_embedder
 from app.ingestion.extractors.dispatch import extract_text
+from app.ingestion.vision.image_analyzer import analyze_image
 
 
 def _mark_failed(db: Session, document: Document | None, message: str) -> None:
@@ -54,29 +55,65 @@ def process_document(db: Session, document_id: int) -> None:
     des Documents in der aktuell aktiven Index-Version, sowohl in SQLite als
     auch in Chroma - ein wiederholter Aufruf (z. B. "Erneut verarbeiten" oder
     nach inhaltlicher Bearbeitung) erzeugt daher nie Duplikate.
+
+    Bilder (Schritt 9) durchlaufen dieselbe Funktion, halten aber nach der
+    Vision-Analyse an: `inhalt` bleibt bewusst leer, bis der Nutzer die
+    KI-Analyse im Review-Schritt bestaetigt/bearbeitet (siehe
+    document_service.confirm_image_review). Ein erneuter Aufruf hier - z. B.
+    aus der Task-Queue nach genau dieser Bestaetigung - findet `inhalt` dann
+    bereits gesetzt vor und indexiert direkt, ohne die Analyse zu wiederholen.
     """
     document = db.get(Document, document_id)
     if document is None:
         raise NotFoundError(f"Document {document_id} wurde nicht gefunden.")
 
-    document.status = DocumentStatus.PROCESSING
-    db.commit()
-
     settings = get_settings()
     chroma_dir = str(settings.chroma_dir)
 
+    # Ein Dokument, das gerade auf Review wartet und hier erneut ankommt (nach
+    # Bestaetigung durch den Nutzer), hat seine "Verarbeitung" im eigentlichen
+    # Sinn (Extraktion/Analyse) bereits hinter sich - Statuskette geht dann
+    # direkt review_required -> indexing, ohne nochmal ueber processing zu laufen.
+    resuming_after_review = document.status == DocumentStatus.REVIEW_REQUIRED
+    if not resuming_after_review:
+        document.status = DocumentStatus.PROCESSING
+        db.commit()
+
     try:
-        # Datei-Upload (Schritt 7): Inhalt liegt noch nicht vor, muss aus der
-        # Originaldatei extrahiert werden. Bei manueller Eingabe (Schritt 3)
-        # ist document.inhalt bereits gesetzt - dieser Block wird dann uebersprungen.
-        if document.inhalt is None and document.original_dateipfad:
-            extension = Path(document.original_dateipfad).suffix.lower()
-            absolute_path = settings.uploads_dir / document.original_dateipfad
-            extracted = extract_text(absolute_path, extension)
-            document.inhalt = extracted.text
-            if document.dokumentdatum is None:
-                document.dokumentdatum = extracted.dokumentdatum or date.today()
-            db.commit()
+        if document.inhalt is None:
+            if document.typ == DocumentType.BILD:
+                if not document.original_dateipfad:
+                    _mark_failed(db, document, "Bild-Dokument ohne Originaldatei.")
+                    return
+                extension = Path(document.original_dateipfad).suffix.lower()
+                image_bytes = (settings.uploads_dir / document.original_dateipfad).read_bytes()
+                analysis = analyze_image(
+                    db, project_id=document.project_id, image_bytes=image_bytes, extension=extension
+                )
+                document.ocr_text = analysis.ocr_text
+                document.ki_analyse_rohtext = analysis.ki_analyse_rohtext
+                if document.dokumentdatum is None:
+                    # Bilder liefern kein extrahierbares Dokumentdatum wie PDF/DOCX -
+                    # Verarbeitungszeitpunkt als Vorbelegung (siehe Briefing).
+                    document.dokumentdatum = date.today()
+                document.status = DocumentStatus.REVIEW_REQUIRED
+                db.commit()
+                # Wartet jetzt auf Bestaetigung/Bearbeitung durch den Nutzer -
+                # Chunking/Embedding erst nach dem Review-Schritt (siehe oben).
+                return
+            elif document.original_dateipfad:
+                # Datei-Upload (Schritt 7): Inhalt liegt noch nicht vor, muss aus
+                # der Originaldatei extrahiert werden.
+                extension = Path(document.original_dateipfad).suffix.lower()
+                absolute_path = settings.uploads_dir / document.original_dateipfad
+                extracted = extract_text(absolute_path, extension)
+                document.inhalt = extracted.text
+                if document.dokumentdatum is None:
+                    document.dokumentdatum = extracted.dokumentdatum or date.today()
+                db.commit()
+            else:
+                _mark_failed(db, document, "Kein indexierbarer Inhalt vorhanden (weder Text noch Originaldatei).")
+                return
 
         text = (document.inhalt or "").strip()
         if not text:

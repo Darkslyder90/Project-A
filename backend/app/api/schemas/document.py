@@ -22,6 +22,12 @@ class DocumentCreate(BaseModel):
     dokumentdatum: date | None = None
 
 
+class DocumentReviewSubmit(BaseModel):
+    """Bestaetigung/Bearbeitung der KI-Bildanalyse im Review-Schritt (Schritt 9)."""
+
+    inhalt: str = Field(min_length=1)
+
+
 class DocumentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -30,6 +36,8 @@ class DocumentRead(BaseModel):
     typ: DocumentType
     titel: str
     inhalt: str | None
+    ocr_text: str | None
+    ki_analyse_rohtext: str | None
     status: DocumentStatus
     fehlermeldung: str | None
     dokumentdatum: date | None

@@ -10,6 +10,7 @@ from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
 from app.db.models.document import Document
 from app.db.models.enums import DocumentStatus, DocumentType
 from app.security.file_safety import (
+    IMAGE_EXTENSIONS,
     build_storage_relative_path,
     looks_like_plausible_content,
     media_type_for_extension,
@@ -108,6 +109,12 @@ def create_uploaded_document(
     get_project(db, project_id)
 
     extension = validate_extension(original_filename)
+    # Bilder sind serverseitig immer typ=bild (siehe Datenmodell/Statuskette-
+    # Sonderfall Review) - unabhaengig davon, was das Formular mitschickt, damit
+    # die Pipeline (siehe ingestion/pipeline.py) zuverlaessig zwischen
+    # Text-Extraktion und Vision-Analyse unterscheiden kann.
+    if extension in IMAGE_EXTENSIONS:
+        typ = DocumentType.BILD
 
     settings = get_settings()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
@@ -193,5 +200,35 @@ def reprocess_document(
     db.commit()
     db.refresh(document)
 
+    task_runner.enqueue(document.id)
+    return document
+
+
+def confirm_image_review(
+    db: Session, project_id: int, document_id: int, *, inhalt: str, task_runner: DocumentTaskRunner
+) -> Document:
+    """Schliesst den Review-Schritt fuer ein Bild ab (siehe Briefing Punkt 3):
+    der Nutzer bestaetigt die KI-Analyse unveraendert oder mit Korrekturen: das
+    Ergebnis wird als `inhalt` gespeichert - die kanonische, primaere Grundlage
+    fuer Chunking/Embedding. `ocr_text`/`ki_analyse_rohtext` bleiben als
+    unveraenderte Rohdaten der urspruenglichen KI-Ausgabe erhalten.
+    """
+    document = get_document(db, project_id, document_id)
+    if document.status != DocumentStatus.REVIEW_REQUIRED:
+        raise ConflictError(
+            f"Document {document_id} wartet aktuell nicht auf eine Review-Bestaetigung "
+            f"(Status: {document.status.value})."
+        )
+
+    confirmed = inhalt.strip()
+    if not confirmed:
+        raise ValidationAppError("Der bestaetigte Inhalt darf nicht leer sein.")
+
+    document.inhalt = confirmed
+    db.commit()
+    db.refresh(document)
+
+    # process_document() findet inhalt jetzt gesetzt vor und indexiert direkt
+    # (review_required -> indexing), ohne die Vision-Analyse zu wiederholen.
     task_runner.enqueue(document.id)
     return document

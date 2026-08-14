@@ -34,8 +34,14 @@ Aktuell abgeschlossen:
    sofort `pending`, das Frontend pollt den Status; Crash-Recovery beim
    Start setzt hängende `processing`/`indexing`-Dokumente zurück auf
    `pending` und stößt sie erneut an
+9. ✅ Bildanalyse + Review-Schritt: Bild-Upload (PNG/JPG) löst eine
+   Claude-Vision-Analyse aus (`ocr_text`/`ki_analyse_rohtext` getrennt
+   gespeichert), Dokument bleibt danach im Status `review_required` stehen;
+   erst nach Bestätigung/Bearbeitung durch den Nutzer wird der Text als
+   `inhalt` übernommen und indexiert – Chunking/Embedding sehen bei Bildern
+   ausschließlich die bestätigte Fassung, nie die Roh-KI-Ausgabe direkt
 
-Alle weiteren Schritte (Bildanalyse, Personen/Tasks/Meetings,
+Alle weiteren Schritte (Hybrid Retrieval, Personen/Tasks/Meetings,
 Übersichtsseiten, Settings, Export/Import, Backup/Update,
 Docker/Prod-Deployment) folgen schrittweise.
 
@@ -223,6 +229,33 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   alle noch `pending` gebliebenen Dokumente erneut in die Queue gestellt.
   Damit kann laut Briefing kein Dokument dauerhaft in einem hängenden Zustand
   stecken bleiben.
+- **Bild-Analyse als fester Zwischenstopp in `process_document()`, nicht als
+  eigener Pipeline-Pfad** (Schritt 9): Ist `typ == bild` und `inhalt` noch
+  `None`, wird die Vision-Analyse ausgeführt, `ocr_text`/`ki_analyse_rohtext`
+  gesetzt, Status auf `review_required` gesetzt und die Funktion kehrt zurück
+  – Chunking/Embedding laufen bewusst nicht in demselben Durchlauf. Bestätigt
+  der Nutzer die Analyse (`confirm_image_review`), wird nur `inhalt` gesetzt
+  und `process_document()` erneut eingereiht: `inhalt` ist dann bereits
+  gesetzt, die Funktion überspringt Extraktion/Vision-Analyse komplett und
+  indexiert direkt (`review_required` → `indexing`, ohne nochmal über
+  `processing` zu laufen) – dieselbe idempotente Funktion bedient damit alle
+  drei Eingabewege (manueller Text, Datei-Upload, Bild-Review), ohne
+  Sonderfall-Code im Background-Task-Runner.
+- **Antwortformat der Vision-Analyse:** feste Zwei-Block-Struktur
+  (`<ocr_text>…</ocr_text><analyse>…</analyse>`) statt eines
+  JSON-Schemas/Structured-Output-Constraints – reicht für den MVP, bleibt
+  aber lesbar/robust: liefert Claude nicht exakt dieses Format, landet die
+  volle, ungeparste Antwort trotzdem nutzbar in `ki_analyse_rohtext`
+  (`ocr_text` bleibt dann leer) statt den Task fehlschlagen zu lassen – kein
+  Blackbox-Fehler nur wegen eines Formatierungsabweichlers.
+- **`typ` wird bei Bild-Uploads serverseitig auf `bild` erzwungen**
+  (`document_service.create_uploaded_document`), unabhängig davon, was das
+  Formular mitschickt – verhindert einen inkonsistenten Zustand, in dem ein
+  Bild z. B. als `notiz` markiert ist und die Pipeline dadurch fälschlich den
+  Text-Extraktionspfad statt der Vision-Analyse waehlt.
+- **Bild-Magic-Bytes ergänzen dieselbe libmagic-freie Prüfung wie Schritt 7:**
+  PNG-Signatur `\x89PNG\r\n\x1a\n`, JPEG-Signatur `\xff\xd8\xff` – gleiche
+  Begründung (keine zusätzliche Systemabhängigkeit für Windows-Dev).
 
 ## Persistenzstruktur
 

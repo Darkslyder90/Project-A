@@ -144,7 +144,7 @@ def test_upload_rejects_unsupported_extension(client):
     project_id = _create_project(client)
     response = client.post(
         f"/api/projects/{project_id}/documents/upload",
-        files={"file": ("bild.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+        files={"file": ("programm.exe", b"MZ...", "application/octet-stream")},
         data={"typ": "notiz"},
     )
     assert response.status_code == 422

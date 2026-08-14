@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_task_runner
-from app.api.schemas.document import DocumentCreate, DocumentRead
+from app.api.schemas.document import DocumentCreate, DocumentRead, DocumentReviewSubmit
 from app.background.task_runner import DocumentTaskRunner
 from app.db.models.enums import DocumentType
 from app.services import document_service
@@ -82,3 +82,16 @@ def reprocess_document(
     task_runner: DocumentTaskRunner = Depends(get_task_runner),
 ) -> DocumentRead:
     return document_service.reprocess_document(db, project_id, document_id, task_runner)
+
+
+@router.post("/{document_id}/review", response_model=DocumentRead)
+def confirm_document_review(
+    project_id: int,
+    document_id: int,
+    payload: DocumentReviewSubmit,
+    db: Session = Depends(get_db),
+    task_runner: DocumentTaskRunner = Depends(get_task_runner),
+) -> DocumentRead:
+    return document_service.confirm_image_review(
+        db, project_id, document_id, inhalt=payload.inhalt, task_runner=task_runner
+    )

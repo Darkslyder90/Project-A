@@ -12,8 +12,20 @@ const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   systemeinstellung: 'Systemeinstellung',
   prozess: 'Prozess',
   notiz: 'Notiz',
+  datei: 'Datei',
+  bild: 'Bild',
   sonstiges: 'Sonstiges',
 }
+
+// Nur diese Typen sind ueber die Formulare waehlbar - 'datei'/'bild' werden
+// beim Upload serverseitig automatisch gesetzt (siehe document_service.py).
+const SELECTABLE_DOCUMENT_TYPES: DocumentType[] = [
+  'meeting',
+  'systemeinstellung',
+  'prozess',
+  'notiz',
+  'sonstiges',
+]
 
 const STATUS_LABELS: Record<Document['status'], string> = {
   pending: 'wartet …',
@@ -38,13 +50,23 @@ export function DocumentsSection({ projectId }: Props) {
   const [creating, setCreating] = useState(false)
   const [reprocessingId, setReprocessingId] = useState<number | null>(null)
 
-  const [mode, setMode] = useState<'manuell' | 'datei'>('manuell')
+  const [mode, setMode] = useState<'manuell' | 'datei' | 'bild'>('manuell')
   const [uploadTyp, setUploadTyp] = useState<DocumentType>('notiz')
   const [uploadTitel, setUploadTitel] = useState('')
   const [uploadDatum, setUploadDatum] = useState('')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [duplicateHint, setDuplicateHint] = useState<string | null>(null)
+
+  const [imageTitel, setImageTitel] = useState('')
+  const [imageDatum, setImageDatum] = useState('')
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+
+  // Entwurf der bestaetigten/bearbeiteten Analyse pro Dokument-ID, waehrend der
+  // Review-Schritt (status=review_required) noch offen ist (Schritt 9).
+  const [reviewDrafts, setReviewDrafts] = useState<Record<number, string>>({})
+  const [submittingReviewId, setSubmittingReviewId] = useState<number | null>(null)
 
   const loadDocuments = () => {
     api
@@ -135,6 +157,48 @@ export function DocumentsSection({ projectId }: Props) {
     }
   }
 
+  const handleImageUpload = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!imageFile) return
+    setUploadingImage(true)
+    setError(null)
+    try {
+      const document = await api.uploadDocument(projectId, {
+        file: imageFile,
+        typ: 'bild',
+        titel: imageTitel.trim() || undefined,
+        dokumentdatum: imageDatum || undefined,
+      })
+      setImageFile(null)
+      setImageTitel('')
+      setImageDatum('')
+      setDocuments((prev) => [document, ...(prev ?? [])])
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  const handleSubmitReview = async (documentId: number, inhalt: string) => {
+    if (!inhalt.trim()) return
+    setSubmittingReviewId(documentId)
+    setError(null)
+    try {
+      const updated = await api.submitDocumentReview(projectId, documentId, inhalt.trim())
+      setDocuments((prev) => prev?.map((d) => (d.id === documentId ? updated : d)) ?? null)
+      setReviewDrafts((prev) => {
+        const next = { ...prev }
+        delete next[documentId]
+        return next
+      })
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSubmittingReviewId(null)
+    }
+  }
+
   const handleReprocess = async (documentId: number) => {
     setReprocessingId(documentId)
     setError(null)
@@ -168,15 +232,22 @@ export function DocumentsSection({ projectId }: Props) {
         >
           Datei hochladen
         </button>
+        <button
+          type="button"
+          className={mode === 'bild' ? 'active' : 'link-button'}
+          onClick={() => setMode('bild')}
+        >
+          Bild hochladen
+        </button>
       </div>
 
       {mode === 'manuell' && (
         <form className="create-document-form" onSubmit={handleCreate}>
           <div className="form-row">
             <select value={typ} onChange={(e) => setTyp(e.target.value as DocumentType)}>
-              {Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => (
+              {SELECTABLE_DOCUMENT_TYPES.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {DOCUMENT_TYPE_LABELS[value]}
                 </option>
               ))}
             </select>
@@ -211,9 +282,9 @@ export function DocumentsSection({ projectId }: Props) {
         <form className="create-document-form" onSubmit={(e) => handleUpload(e, false)}>
           <div className="form-row">
             <select value={uploadTyp} onChange={(e) => setUploadTyp(e.target.value as DocumentType)}>
-              {Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => (
+              {SELECTABLE_DOCUMENT_TYPES.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {DOCUMENT_TYPE_LABELS[value]}
                 </option>
               ))}
             </select>
@@ -251,6 +322,39 @@ export function DocumentsSection({ projectId }: Props) {
         </form>
       )}
 
+      {mode === 'bild' && (
+        <form className="create-document-form" onSubmit={handleImageUpload}>
+          <div className="form-row">
+            <input
+              type="text"
+              placeholder="Titel (optional, sonst Dateiname)"
+              value={imageTitel}
+              onChange={(e) => setImageTitel(e.target.value)}
+            />
+            <input
+              type="date"
+              value={imageDatum}
+              onChange={(e) => setImageDatum(e.target.value)}
+              title="Dokumentdatum (optional, sonst Upload-Zeitpunkt)"
+            />
+          </div>
+          <input
+            type="file"
+            accept=".png,.jpg,.jpeg"
+            onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+            required
+          />
+          <p className="subtitle">
+            Unterstützt: PNG, JPG. Das Bild wird zur Analyse (Texterkennung + Beschreibung)
+            an die Claude API übertragen; das Ergebnis prüfst du anschließend im Review-Schritt,
+            bevor es indexiert wird.
+          </p>
+          <button type="submit" disabled={uploadingImage || !imageFile}>
+            {uploadingImage ? 'Wird hochgeladen …' : 'Hochladen'}
+          </button>
+        </form>
+      )}
+
       {documents === null && !error && <p className="subtitle">Lade Dokumente …</p>}
       {documents?.length === 0 && <p className="subtitle">Noch keine Dokumente vorhanden.</p>}
 
@@ -278,6 +382,35 @@ export function DocumentsSection({ projectId }: Props) {
                 <span>{doc.fehlermeldung}</span>
                 <button disabled={reprocessingId === doc.id} onClick={() => handleReprocess(doc.id)}>
                   {reprocessingId === doc.id ? 'Wird erneut verarbeitet …' : 'Erneut verarbeiten'}
+                </button>
+              </div>
+            )}
+            {doc.status === 'review_required' && (
+              <div className="document-review-panel">
+                {doc.ocr_text && (
+                  <div>
+                    <p className="subtitle">Im Bild erkannter Text (OCR):</p>
+                    <pre className="document-review-ocr">{doc.ocr_text}</pre>
+                  </div>
+                )}
+                <p className="subtitle">
+                  KI-Analyse – bitte prüfen und bei Bedarf korrigieren, bevor sie als Inhalt
+                  übernommen wird:
+                </p>
+                <textarea
+                  rows={5}
+                  value={reviewDrafts[doc.id] ?? doc.ki_analyse_rohtext ?? ''}
+                  onChange={(e) =>
+                    setReviewDrafts((prev) => ({ ...prev, [doc.id]: e.target.value }))
+                  }
+                />
+                <button
+                  disabled={submittingReviewId === doc.id}
+                  onClick={() =>
+                    handleSubmitReview(doc.id, reviewDrafts[doc.id] ?? doc.ki_analyse_rohtext ?? '')
+                  }
+                >
+                  {submittingReviewId === doc.id ? 'Wird übernommen …' : 'Bestätigen & übernehmen'}
                 </button>
               </div>
             )}

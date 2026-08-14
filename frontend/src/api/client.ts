@@ -10,7 +10,14 @@ export type ProjectCreateInput = {
   beschreibung?: string | null
 }
 
-export type DocumentType = 'meeting' | 'systemeinstellung' | 'prozess' | 'notiz' | 'sonstiges'
+export type DocumentType =
+  | 'meeting'
+  | 'systemeinstellung'
+  | 'prozess'
+  | 'notiz'
+  | 'datei'
+  | 'bild'
+  | 'sonstiges'
 
 export type DocumentStatus = 'pending' | 'processing' | 'review_required' | 'indexing' | 'ready' | 'failed'
 
@@ -20,6 +27,8 @@ export type Document = {
   typ: DocumentType
   titel: string
   inhalt: string | null
+  ocr_text: string | null
+  ki_analyse_rohtext: string | null
   status: DocumentStatus
   fehlermeldung: string | null
   dokumentdatum: string | null
@@ -143,6 +152,11 @@ export const api = {
   reprocessDocument: (projectId: number, documentId: number) =>
     request<Document>(`/api/projects/${projectId}/documents/${documentId}/reprocess`, {
       method: 'POST',
+    }),
+  submitDocumentReview: (projectId: number, documentId: number, inhalt: string) =>
+    request<Document>(`/api/projects/${projectId}/documents/${documentId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ inhalt }),
     }),
   uploadDocument: (projectId: number, input: DocumentUploadInput) => {
     const formData = new FormData()
