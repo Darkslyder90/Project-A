@@ -40,10 +40,17 @@ Aktuell abgeschlossen:
    erst nach Bestätigung/Bearbeitung durch den Nutzer wird der Text als
    `inhalt` übernommen und indexiert – Chunking/Embedding sehen bei Bildern
    ausschließlich die bestätigte Fassung, nie die Roh-KI-Ausgabe direkt
+10. ✅ Hybrid Retrieval mit FTS5: paralleler Keyword-/Volltextsuchpfad über
+    einen SQLite-FTS5-Index (`chunk_fts`, automatisch per Trigger synchron
+    zu `chunks`) ergänzt die bestehende Vektorsuche; beide Kandidatenlisten
+    werden per Reciprocal Rank Fusion kombiniert (inkl. Passthrough-
+    Rerank-Schnittstelle für später) und liefern u. a. exakte Treffer für
+    SAP-Transaktionscodes/Tabellen/Ticketnummern zuverlässig, auch wenn
+    Embeddings dort schwächeln; Chat und Retrieval-Test-Ansicht nutzen
+    denselben `hybrid_search()`-Pfad
 
-Alle weiteren Schritte (Hybrid Retrieval, Personen/Tasks/Meetings,
-Übersichtsseiten, Settings, Export/Import, Backup/Update,
-Docker/Prod-Deployment) folgen schrittweise.
+Alle weiteren Schritte (Personen/Tasks/Meetings, Übersichtsseiten, Settings,
+Export/Import, Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
 
 ## Lokale Entwicklung
 
@@ -256,6 +263,44 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
 - **Bild-Magic-Bytes ergänzen dieselbe libmagic-freie Prüfung wie Schritt 7:**
   PNG-Signatur `\x89PNG\r\n\x1a\n`, JPEG-Signatur `\xff\xd8\xff` – gleiche
   Begründung (keine zusätzliche Systemabhängigkeit für Windows-Dev).
+- **`chunk_fts` als FTS5-"external content"-Tabelle über `chunks.rowid`**
+  (Schritt 10), nicht als eigenständige Tabelle mit dupliziertem Text:
+  spart Speicher und hält die Source-of-Truth-Regel ein (Chunk-Text lebt nur
+  einmal, in `chunks`). SQLites impliziter `rowid` existiert auch bei einem
+  TEXT-Primary-Key wie `Chunk.id` (UUID) und ist als `content_rowid`
+  verwendbar, ohne eine zusätzliche Integer-Spalte einzuführen.
+- **Synchronisierung über SQL-Trigger statt Anwendungscode** (`chunks_fts_ai`/
+  `_ad`/`_au`, angelegt in Migration `c7e2a1f4d9b3`): haelt `chunk_fts`
+  garantiert konsistent zu `chunks`, unabhängig vom Codepfad (`process_document`,
+  `_cleanup_existing_chunks`, oder ein DB-seitiges `ON DELETE CASCADE` bei
+  Dokument-Löschung) – robuster als eine Pflege an mehreren Stellen im
+  Python-Code, die leicht auseinanderlaufen könnte.
+- **`chunk_fts` ist kein ORM-Modell und daher nicht Teil von `Base.metadata`:**
+  Tests, die das Schema direkt aus `Base.metadata.create_all()` erzeugen (ohne
+  Alembic zu durchlaufen, siehe `tests/conftest.py`), rufen zusätzlich
+  `app/db/fts_setup.py::ensure_chunk_fts()` auf – dieselbe (idempotente) DDL
+  wie in der Migration, bewusst als eigene Kopie gehalten statt die Migration
+  zu importieren, damit Migrationen ein eingefrorener historischer Schritt
+  bleiben. `alembic/env.py` filtert `chunk_fts`/ihre SQLite-Schattentabellen
+  (`_data`/`_idx`/`_docsize`/`_config`) zusätzlich per `include_object` aus
+  dem Autogenerate-/`alembic check`-Vergleich heraus, sonst würde jeder Check
+  fälschlich vorschlagen, sie wieder zu löschen.
+- **Keyword-Suche baut MATCH-Anfragen aus einzeln in Anführungszeichen
+  gesetzten, mit OR verknüpften Tokens** (`retrieval/keyword_search.py`)
+  statt rohen Nutzertext direkt an FTS5 MATCH zu übergeben – schützt vor
+  FTS5-Syntaxfehlern durch Sonderzeichen/reservierte Operatoren (`-`, `:`,
+  `AND`/`OR`/`NOT`/`NEAR`) im Suchtext.
+- **Fusion ausschließlich rangbasiert (Reciprocal Rank Fusion, `k=60`)**,
+  wie im Briefing gefordert – Vektor-Cosine-Similarity und BM25-Scores liegen
+  auf nicht vergleichbaren Skalen und werden nirgends direkt addiert.
+- **Rerank-Schnittstelle als eigenes, bewusst leeres Modul**
+  (`retrieval/reranker.py`, Passthrough) – definierte Signatur
+  (Kandidatenliste + Query rein → Liste raus) für einen späteren lokalen
+  Cross-Encoder, ohne `hybrid_search()` umbauen zu müssen.
+- **`candidate_k_vector`/`candidate_k_keyword` kommen live aus den globalen
+  RAG-Settings, nicht aus der am Index eingefrorenen Konfiguration** (anders
+  als Embedding-Modell/Chunking) – sie sind reine Retrieval-Zeit-Parameter
+  und beeinflussen nicht, wie der Index aufgebaut wurde.
 
 ## Persistenzstruktur
 

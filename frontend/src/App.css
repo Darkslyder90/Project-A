@@ -360,6 +360,29 @@ button.danger {
   margin-left: auto;
 }
 
+.retrieval-hit-source {
+  margin-left: auto;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  background-color: rgba(91, 157, 255, 0.15);
+  color: var(--color-accent);
+}
+
+.retrieval-hit-source--beide {
+  background-color: rgba(76, 175, 125, 0.15);
+  color: var(--color-ok);
+}
+
+.retrieval-hit-scores {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
 .retrieval-hit-text {
   margin: 0.5rem 0 0;
   font-size: 0.9rem;

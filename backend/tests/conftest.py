@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings, get_settings
 from app.db import models  # noqa: F401  (registriert alle Modelle bei Base.metadata)
 from app.db.base import Base
+from app.db.fts_setup import ensure_chunk_fts
 from app.main import create_app
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -39,6 +40,11 @@ def test_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
 def app(test_settings: Settings):
     application = create_app(test_settings)
     Base.metadata.create_all(bind=application.state.engine)
+    # chunk_fts (FTS5-Virtual-Table + Sync-Trigger, siehe Schritt 10) ist kein
+    # ORM-Modell und entsteht daher nicht ueber Base.metadata.create_all,
+    # sondern ueber dieselbe idempotente DDL wie in der Alembic-Migration.
+    with application.state.engine.begin() as connection:
+        ensure_chunk_fts(connection)
     return application
 
 

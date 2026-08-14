@@ -52,12 +52,18 @@ export type DocumentUploadInput = {
   force?: boolean
 }
 
+export type GefundenUeber = 'vector' | 'keyword' | 'beide'
+
 export type RetrievalHit = {
   chunk_id: string
   document_id: number
   document_titel: string
-  vector_rank: number
-  vector_score: number
+  vector_rank: number | null
+  vector_score: number | null
+  keyword_rank: number | null
+  keyword_score: number | null
+  fusion_rank: number
+  gefunden_ueber: GefundenUeber
   text: string
   dokumenttyp: DocumentType | null
   dokumentdatum: string | null

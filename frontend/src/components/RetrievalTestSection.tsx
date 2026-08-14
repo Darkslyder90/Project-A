@@ -30,8 +30,9 @@ export function RetrievalTestSection({ projectId }: Props) {
     <section className="retrieval-test-section">
       <h2>Retrieval testen</h2>
       <p className="subtitle">
-        Reine Vektorsuche über die vorhandenen Dokumente – ohne Claude-Aufruf. Nützlich, um vor
-        der Chat-Anbindung zu prüfen, ob die richtigen Textstellen gefunden werden.
+        Hybrid Retrieval (Vektorsuche + Volltextsuche, per Reciprocal Rank Fusion kombiniert) über
+        die vorhandenen Dokumente – ohne Claude-Aufruf. Nützlich, um vor der Chat-Anbindung zu
+        prüfen, ob die richtigen Textstellen gefunden werden.
       </p>
 
       <form className="retrieval-test-form" onSubmit={handleSearch}>
@@ -56,10 +57,28 @@ export function RetrievalTestSection({ projectId }: Props) {
         {hits?.map((hit) => (
           <li key={hit.chunk_id} className="retrieval-hit">
             <div className="retrieval-hit-header">
-              <span className="retrieval-hit-rank">#{hit.vector_rank}</span>
+              <span className="retrieval-hit-rank">#{hit.fusion_rank}</span>
               <span className="retrieval-hit-title">{hit.document_titel}</span>
               {hit.abschnitt && <span className="retrieval-hit-section">{hit.abschnitt}</span>}
-              <span className="retrieval-hit-score">Score {hit.vector_score.toFixed(3)}</span>
+              <span className={`retrieval-hit-source retrieval-hit-source--${hit.gefunden_ueber}`}>
+                {hit.gefunden_ueber === 'beide'
+                  ? 'Vektor + Volltext'
+                  : hit.gefunden_ueber === 'vector'
+                    ? 'Vektor'
+                    : 'Volltext'}
+              </span>
+            </div>
+            <div className="retrieval-hit-scores">
+              {hit.vector_rank !== null && (
+                <span>
+                  Vektor #{hit.vector_rank} · {hit.vector_score?.toFixed(3)}
+                </span>
+              )}
+              {hit.keyword_rank !== null && (
+                <span>
+                  Volltext #{hit.keyword_rank} · bm25 {hit.keyword_score?.toFixed(3)}
+                </span>
+              )}
             </div>
             <p className="retrieval-hit-text">{hit.text}</p>
           </li>

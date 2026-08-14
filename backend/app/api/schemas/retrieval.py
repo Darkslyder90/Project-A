@@ -14,8 +14,12 @@ class RetrievalTestHitRead(BaseModel):
     chunk_id: str
     document_id: int
     document_titel: str
-    vector_rank: int
-    vector_score: float
+    vector_rank: int | None
+    vector_score: float | None
+    keyword_rank: int | None
+    keyword_score: float | None
+    fusion_rank: int
+    gefunden_ueber: str
     text: str
     dokumenttyp: str | None
     dokumentdatum: date | None

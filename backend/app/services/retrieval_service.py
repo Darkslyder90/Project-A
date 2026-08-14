@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.chunk import Chunk
 from app.db.models.document import Document
-from app.retrieval.vector_search import vector_search
+from app.retrieval.hybrid_search import hybrid_search
 from app.services.project_service import get_project
 
 
@@ -14,8 +14,12 @@ class RetrievalTestHit:
     chunk_id: str
     document_id: int
     document_titel: str
-    vector_rank: int
-    vector_score: float
+    vector_rank: int | None
+    vector_score: float | None
+    keyword_rank: int | None
+    keyword_score: float | None
+    fusion_rank: int
+    gefunden_ueber: str
     text: str
     dokumenttyp: str | None
     dokumentdatum: date | None
@@ -23,13 +27,17 @@ class RetrievalTestHit:
 
 
 def test_retrieval(db: Session, project_id: int, query: str, top_k: int) -> list[RetrievalTestHit]:
-    """Debug-/Testfunktion fuer Schritt 4 ("Retrieval-Test ohne Claude"): fuehrt
-    nur die Vektorsuche aus und reichert die Treffer mit den vollstaendigen
-    Chunk-/Document-Metadaten aus SQLite an - ohne einen Claude-Aufruf.
+    """Debug-/Testfunktion fuer Schritt 4/10 ("Retrieval-Test ohne Claude"):
+    fuehrt den vollstaendigen Hybrid-Retrieval-Ablauf aus (Vektor + Keyword/
+    FTS5 + RRF-Fusion) und reichert die Treffer mit den vollstaendigen Chunk-/
+    Document-Metadaten aus SQLite an - ohne einen Claude-Aufruf. `top_k`
+    ueberschreibt dabei nur final_k fuer diese eine Debug-Anfrage
+    (candidate_k_vector/candidate_k_keyword kommen unveraendert aus den
+    globalen RAG-Settings, siehe retrieval/hybrid_search.py).
     """
     get_project(db, project_id)  # 404, falls Projekt nicht existiert
 
-    hits = vector_search(db, project_id, query, top_k)
+    hits = hybrid_search(db, project_id, query, final_k_override=top_k)
     if not hits:
         return []
 
@@ -45,7 +53,7 @@ def test_retrieval(db: Session, project_id: int, query: str, top_k: int) -> list
     for hit in hits:
         chunk = chunks_by_id.get(hit.chunk_id)
         if chunk is None:
-            # Sollte nie vorkommen (Chroma und SQLite werden gemeinsam
+            # Sollte nie vorkommen (Chroma/FTS5 und SQLite werden gemeinsam
             # geschrieben) - defensiv trotzdem ueberspringen statt zu crashen.
             continue
         results.append(
@@ -55,6 +63,10 @@ def test_retrieval(db: Session, project_id: int, query: str, top_k: int) -> list
                 document_titel=titles_by_document_id.get(hit.document_id, "(unbekannt)"),
                 vector_rank=hit.vector_rank,
                 vector_score=hit.vector_score,
+                keyword_rank=hit.keyword_rank,
+                keyword_score=hit.keyword_score,
+                fusion_rank=hit.fusion_rank,
+                gefunden_ueber=hit.gefunden_ueber,
                 text=chunk.text,
                 dokumenttyp=chunk.dokumenttyp,
                 dokumentdatum=chunk.dokumentdatum,

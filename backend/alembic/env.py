@@ -20,6 +20,19 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+
+def _include_object(object, name, type_, reflected, compare_to):  # noqa: ARG001
+    """chunk_fts (FTS5-Virtual-Table, Schritt 10) und ihre von SQLite intern
+    erzeugten Schatten-Tabellen (_data/_idx/_docsize/_config) sind kein
+    ORM-Modell und tauchen daher nie in Base.metadata auf. Ohne diesen Filter
+    wuerde jede Autogenerate-/Check-Ausfuehrung faelschlich vorschlagen, sie
+    wieder zu loeschen - sie werden stattdessen als rohes SQL in der
+    zugehoerigen Migration verwaltet (siehe versions/c7e2a1f4d9b3_*.py).
+    """
+    if type_ == "table" and name is not None and (name == "chunk_fts" or name.startswith("chunk_fts_")):
+        return False
+    return True
+
 # DB-URL kommt bewusst aus app.config (env-gesteuert), nicht aus alembic.ini,
 # damit Dev/Prod ohne manuelles Editieren von alembic.ini funktionieren.
 _settings = get_settings()
@@ -50,6 +63,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=_include_object,
     )
 
     with context.begin_transaction():
@@ -77,6 +91,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
+            include_object=_include_object,
         )
 
         with context.begin_transaction():

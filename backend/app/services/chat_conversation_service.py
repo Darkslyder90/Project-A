@@ -12,7 +12,6 @@ from app.db.models.document import Document
 from app.db.models.enums import ApiUsagePurpose, ChatRole
 from app.services.chat_service import build_sources
 from app.services.project_service import get_project
-from app.services.settings_service import get_app_settings
 
 _TITEL_MAX_LEN = 80
 _ZITAT_AUSSCHNITT_MAX_LEN = 300
@@ -133,8 +132,7 @@ def send_message(
     # Konversationsverlauf dient nur der Kontextaufloesung, nicht als eigene
     # Wissensquelle (siehe Briefing) - fachliche Grundlage ist ausschliesslich
     # die fuer DIESE Anfrage frisch retrievte Quellenliste.
-    app_settings = get_app_settings(db)
-    sources = build_sources(db, project_id, query, app_settings.final_k)
+    sources = build_sources(db, project_id, query)
     system_prompt = build_system_prompt(sources)
 
     claude_messages = [{"role": m.rolle.value, "content": m.text} for m in prior_messages]

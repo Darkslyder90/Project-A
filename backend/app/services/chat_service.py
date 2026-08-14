@@ -3,17 +3,17 @@ from sqlalchemy.orm import Session
 from app.chat.prompt_builder import PromptSource
 from app.db.models.chunk import Chunk
 from app.db.models.document import Document
-from app.retrieval.vector_search import vector_search
+from app.retrieval.hybrid_search import hybrid_search
 
 
-def build_sources(db: Session, project_id: int, query: str, top_k: int) -> list[PromptSource]:
-    """Fuehrt die Retrieval-Anfrage fuer eine Chat-Frage aus und baut daraus die
+def build_sources(db: Session, project_id: int, query: str) -> list[PromptSource]:
+    """Fuehrt die Hybrid-Retrieval-Anfrage (Vektor + Keyword/FTS5 + RRF-Fusion,
+    siehe Schritt 10) fuer eine Chat-Frage aus und baut daraus die
     serverseitigen PromptSource-Objekte (S1..Sn), die Claude als abgegrenzten
-    <dokumente>-Block sieht. Schritt 5/6: reine Vektorsuche (Hybrid Retrieval
-    mit FTS5 kommt Schritt 10) - final_k wird direkt als top_k der Vektorsuche
-    verwendet, da es noch keine Fusion mehrerer Suchpfade gibt.
+    <dokumente>-Block sieht. candidate_k/final_k kommen aus den globalen
+    RAG-Settings (siehe retrieval/hybrid_search.py).
     """
-    hits = vector_search(db, project_id, query, top_k)
+    hits = hybrid_search(db, project_id, query)
     if not hits:
         return []
 
