@@ -1,0 +1,7 @@
+# Diese Dateien landen per "git pull" direkt auf dem Linux-VPS (siehe
+# scripts/update.sh) - CRLF-Zeilenenden (z. B. durch Windows-Checkout) wuerden
+# das Shebang von Shell-Skripten kaputt machen ("bad interpreter").
+*.sh text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
+docker-compose.yml text eol=lf

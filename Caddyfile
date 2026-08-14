@@ -1,0 +1,25 @@
+# Reverse Proxy + HTTPS (automatisch per Let's Encrypt) + Basic Auth (siehe
+# Briefing: "Server ist öffentlich erreichbar -> Basic-Auth oder Token-Schutz
+# vor die App legen"). Variablen kommen aus der Compose-.env (siehe
+# .env.example im Repo-Root).
+
+{$DOMAIN} {
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_PASSWORD_HASH}
+	}
+
+	# /api/* und /health gehen direkt an das Backend - alles andere an das
+	# statisch ausgelieferte Frontend (siehe Briefing: beide laufen als eigene
+	# Container hinter demselben Reverse Proxy).
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle /health {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
+}

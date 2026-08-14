@@ -1,0 +1,58 @@
+# Produktiv-Deployment (siehe PROJECT_BRIEFING.md: "Ausführung"). Lokale
+# Entwicklung nutzt bewusst KEIN Docker (siehe README) - diese Datei ist
+# ausschliesslich fuer den Hetzner-VPS/Prod-Betrieb gedacht.
+#
+# Aufruf ueber scripts/update.sh (siehe dort) statt direkt "docker compose up",
+# damit Backup -> Migration -> Start immer in der richtigen Reihenfolge laufen.
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      ENV: prod
+      DATA_DIR: /data
+      DATABASE_URL: ${DATABASE_URL:-}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY muss in .env gesetzt sein - siehe README}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+      CLAUDE_MODEL_DEFAULT: ${CLAUDE_MODEL_DEFAULT:-claude-opus-5}
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-50}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    volumes:
+      - project-a-data:/data
+    networks:
+      - internal
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN muss in .env gesetzt sein - siehe README}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:?BASIC_AUTH_USER muss in .env gesetzt sein - siehe README}
+      BASIC_AUTH_PASSWORD_HASH: ${BASIC_AUTH_PASSWORD_HASH:?BASIC_AUTH_PASSWORD_HASH muss in .env gesetzt sein - siehe README}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - internal
+
+volumes:
+  project-a-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  internal:

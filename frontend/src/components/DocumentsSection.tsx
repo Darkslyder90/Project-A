@@ -452,6 +452,15 @@ export function DocumentsSection({ projectId }: Props) {
               />
             </div>
             <div className="entity-actions">
+              {(doc.status === 'ready' || doc.status === 'failed') && (
+                <button
+                  className="link-button"
+                  disabled={reprocessingId === doc.id}
+                  onClick={() => handleReprocess(doc.id)}
+                >
+                  {reprocessingId === doc.id ? 'Wird neu indexiert …' : 'Neu indexieren'}
+                </button>
+              )}
               <button
                 className="link-button"
                 disabled={deletingId === doc.id}
@@ -460,12 +469,9 @@ export function DocumentsSection({ projectId }: Props) {
                 {deletingId === doc.id ? 'Wird gelöscht …' : 'Löschen'}
               </button>
             </div>
-            {doc.status === 'failed' && (
+            {doc.status === 'failed' && doc.fehlermeldung && (
               <div className="document-error">
                 <span>{doc.fehlermeldung}</span>
-                <button disabled={reprocessingId === doc.id} onClick={() => handleReprocess(doc.id)}>
-                  {reprocessingId === doc.id ? 'Wird erneut verarbeitet …' : 'Erneut verarbeiten'}
-                </button>
               </div>
             )}
             {doc.status === 'review_required' && (

@@ -82,9 +82,18 @@ Aktuell abgeschlossen:
     wieder auf) und Zip-Slip-geschützt; nach erfolgreichem Import wird jedes
     Dokument automatisch neu indexiert (Chroma ist für das neue Projekt
     zunächst leer)
+15. ✅ Backup/Update/Recovery + Docker Compose: konsistenzsicheres Backup
+    (SQLite `VACUUM INTO` + Uploads, bewusst ohne Chroma/Encryption-Secret,
+    Aufbewahrung der letzten 10 automatischen Backups) als eigenständiges
+    Skript (`backend/scripts/backup.py`); `scripts/update.sh` fasst den im
+    Briefing vorgeschriebenen Update-Ablauf zusammen (Backup → `git pull` →
+    Images bauen → Migration **einmalig kontrolliert** → Start → Healthcheck);
+    Produktiv-Deployment per `docker-compose.yml` (Backend + statisch
+    ausgeliefertes Frontend + Caddy als Reverse Proxy mit automatischem HTTPS
+    + Basic Auth). Healthcheck (SQLite/Verzeichnisse, kein Claude-Aufruf) war
+    bereits seit Schritt 1 vorhanden.
 
-Alle weiteren Schritte (Backup/Update, Docker/Prod-Deployment) folgen
-schrittweise.
+Damit sind alle 15 im Briefing beschriebenen vertikalen Schritte umgesetzt.
 
 ## Lokale Entwicklung
 
@@ -129,6 +138,84 @@ npm run dev
 Lokale Dev-Daten liegen unter `data-dev/` im Repo-Root (SQLite-DB, Uploads,
 Chroma, Embedding-Model-Cache, Backups) – komplett getrennt von späteren
 Produktivdaten und in `.gitignore` ausgeschlossen.
+
+## Deployment (Produktion)
+
+Produktiv läuft Project-A per `docker compose` auf einem eigenen VPS – lokale
+Entwicklung nutzt bewusst **kein** Docker (siehe oben). Drei Container:
+
+- **backend** – FastAPI (`backend/Dockerfile`), Healthcheck ruft ausschließlich
+  `/health` auf (kein Claude-Aufruf, siehe Briefing).
+- **frontend** – gebauter React-Build, statisch per nginx ausgeliefert
+  (`frontend/Dockerfile`).
+- **caddy** – Reverse Proxy mit automatischem HTTPS (Let's Encrypt) + Basic
+  Auth vor der gesamten App (siehe Briefing: "Server ist öffentlich erreichbar").
+  Leitet `/api/*` und `/health` an `backend`, alles andere an `frontend` weiter.
+
+### Erststart
+
+```bash
+git clone <repo-url> project-a
+cd project-a
+cp .env.example .env        # DOMAIN, BASIC_AUTH_*, SETTINGS_ENCRYPTION_KEY setzen
+docker compose build
+docker compose run --rm backend alembic upgrade head
+docker compose up -d
+```
+
+`SETTINGS_ENCRYPTION_KEY` erzeugen mit:
+`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+`BASIC_AUTH_PASSWORD_HASH` erzeugen mit:
+`docker run --rm caddy caddy hash-password --plaintext 'dein-passwort'`
+
+**Encryption-Secret (wichtig):** `SETTINGS_ENCRYPTION_KEY` bleibt bewusst
+außerhalb der SQLite-Datenbank und ist **nicht** Teil der automatischen
+Update-Backups (siehe unten) oder eines Projekt-Exports. Separat sicher
+aufbewahren (z. B. Passwortmanager) – geht der Schlüssel verloren, ist ein in
+der DB gespeicherter Claude-API-Key nicht mehr entschlüsselbar und muss in
+den Einstellungen neu eingegeben werden. Alle übrigen Daten (Dokumente,
+Personen, Tasks, Chats etc.) sind davon unberührt.
+
+### Updates
+
+```bash
+./scripts/update.sh
+```
+
+Führt in fester Reihenfolge aus (siehe Briefing "Updates, Migrationen,
+Backup & Healthcheck"): Backup → `git pull` → Images bauen → `alembic upgrade
+head` (einmalig, kontrolliert, nicht parallel aus mehreren Containern) →
+`docker compose up -d` → Healthcheck. Schlägt die Migration fehl, bricht das
+Skript ab, bevor die neue Anwendung gestartet wird – die vorherige,
+funktionierende Version läuft unverändert weiter.
+
+## Backup & Restore
+
+Ein Backup enthält die konsistent gesicherte SQLite-Datenbank (`VACUUM INTO`,
+keine rohe Dateikopie einer möglicherweise gerade beschriebenen Datei) sowie
+alle hochgeladenen Originaldateien, gepackt als Zeitstempel-ZIP unter
+`<DATA_DIR>/backups/`. **Nicht** enthalten: Chroma (aus SQLite + Originalen
+jederzeit rekonstruierbar) und `SETTINGS_ENCRYPTION_KEY` (siehe oben).
+Automatische Backups behalten standardmäßig die letzten 10 (ältere werden
+beim nächsten Backup entfernt).
+
+- Manuell/per Cron: `./scripts/backup.sh`
+- Automatisch vor jedem Update: Teil von `scripts/update.sh` (siehe oben)
+
+**Restore** ist im MVP ein manueller Vorgang (kein eigener Restore-Befehl):
+Anwendung stoppen (`docker compose down`), Backup-ZIP entpacken, `project-a.db`
+und `uploads/` in das `DATA_DIR`-Volume zurückkopieren, Anwendung neu starten.
+Die zurückgesicherte DB enthält weiterhin ihre `chunks`/`chunk_fts`-Einträge,
+daher funktioniert die Volltextsuche im Chat sofort wieder; nur falls das
+Chroma-Verzeichnis selbst nicht mit zurückgesichert wurde (z. B. Datenverlust
+nur dort), liefert der Vektor-Suchpfad bis dahin keine Treffer – **ein
+automatischer Rebuild bei leerem/fehlendem Chroma ist im MVP noch nicht
+eingebaut** (das im Briefing beschriebene "Gesamtes Projekt neu indexieren"
+bleibt zukünftige Arbeit). Übergangsweise pro betroffenem Dokument auf
+"Erneut verarbeiten" klicken (siehe Übersichtsseite) – das baut sowohl
+Chroma-Vektoren als auch `chunks`/`chunk_fts` für dieses eine Dokument
+sauber neu auf (`process_document()` löscht vorhandene Chunks der aktiven
+Index-Version idempotent und erzeugt sie neu).
 
 ## Technische Entscheidungen (Auszug)
 
@@ -490,6 +577,61 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   strikte Trennung von System-Backup und Projekt-Export) – ein importiertes
   Projekt nutzt automatisch die auf der Zielinstanz bereits konfigurierte
   Claude-Einstellung, ohne dass der Import selbst eine mitbringt.
+- **Backup als eigenständiges Skript (`backend/scripts/backup.py`), nicht als
+  API-Endpunkt** – Backups sind eine Infrastruktur-/Betriebsaufgabe (Cron,
+  `update.sh`), keine Nutzerfunktion innerhalb der App; ein Endpunkt dafür
+  hätte zusätzliche Auth-/Abuse-Überlegungen für eine potenziell
+  langlaufende, IO-intensive Operation gebraucht, ohne dass die Instanz
+  einen legitimen Deployment-Prozess damit besser bedienen könnte.
+- **SQLite-Backup über eine eigene, kurzlebige `sqlite3`-Verbindung statt der
+  laufenden SQLAlchemy-Engine** (`backup_service.create_backup`) – `VACUUM
+  INTO` soll unabhängig vom Transaktionszustand einer request-gebundenen
+  ORM-Session laufen; das Skript ist bewusst als eigenständiger Prozess
+  konzipiert (auch per Cron unabhängig vom laufenden App-Prozess aufrufbar),
+  nicht als etwas, das sich eine bestehende Datenbankverbindung teilt.
+- **Zeitstempel mit Mikrosekunden-Präzision** (`%Y%m%d-%H%M%S-%f`) statt nur
+  Sekunden für Backup-Dateinamen – bei zwei Backups innerhalb derselben
+  Sekunde (z. B. in Tests, oder falls ein Cron-Backup mit einem manuellen
+  überlappt) hätte eine reine Sekunden-Auflösung sonst ein Backup lautlos
+  überschrieben.
+- **Aufbewahrung der letzten 10 Backups** als fester Default (kein
+  Settings-Feld dafür) – im Briefing nur als "einfache
+  Aufbewahrungsstrategie" gefordert, ohne konkrete Zahl; als Parameter der
+  Funktion (nicht hart einprogrammiert) trotzdem leicht änderbar, falls
+  später doch ein Settings-Feld gewünscht wird.
+- **Docker Compose: drei Container (Backend, Frontend, Caddy)**, exakt wie im
+  Briefing beschrieben, statt Frontend/Reverse-Proxy zu einem Container
+  zusammenzulegen – Caddy dient ausschließlich als TLS-Terminierung +
+  Basic-Auth + Pfad-Routing, kennt weder Backend noch Frontend im Detail;
+  das statisch gebaute Frontend-Image bräuchte sonst zusätzlich eine
+  Reverse-Proxy-Konfiguration, die es beim aktuellen Aufbau gar nicht kennen
+  muss.
+- **Migration läuft nie automatisch im Container-Start-Befehl**, sondern
+  ausschließlich als expliziter `docker compose run --rm backend alembic
+  upgrade head`-Schritt in `scripts/update.sh`, VOR `docker compose up -d`
+  (siehe Briefing: "kontrolliert genau einmal ausführen, nicht parallel aus
+  mehreren Workern/Containern heraus" – ein Migrations-Schritt im
+  CMD/Entrypoint liefe sonst bei jedem Container-(Neu-)Start erneut, auch bei
+  z. B. einem Crash-Restart durch `restart: unless-stopped`).
+- **`.gitattributes` erzwingt LF-Zeilenenden** für Shell-Skripte,
+  `Dockerfile`, `Caddyfile`, `docker-compose.yml` – diese Dateien landen per
+  `git pull` direkt auf dem Linux-VPS; CRLF durch einen Windows-Checkout
+  würde das Shebang eines Shell-Skripts unbrauchbar machen ("bad
+  interpreter").
+- **`SETTINGS_ENCRYPTION_KEY` als Pflichtvariable in `docker-compose.yml`**
+  (`${SETTINGS_ENCRYPTION_KEY:?...}`, Compose bricht ohne gesetzten Wert
+  kontrolliert mit einer verständlichen Meldung ab) – ein Prod-Start ganz
+  ohne dieses Secret wäre zwar laut Briefing tolerierbar (App startet
+  trotzdem), in der Docker-Erststart-Situation ist ein sofortiger, klarer
+  Abbruch aber hilfreicher als ein später erst bemerktes "Key kann nicht
+  gespeichert werden".
+- **Beim Schreiben der Restore-Anleitung aufgefallen und korrigiert:** der
+  Button "Neu indexieren" pro Dokument (siehe Briefing Punkt 6) war bisher
+  nur als "Erneut verarbeiten" bei `status=failed` sichtbar, nicht generell
+  verfügbar. Jetzt zusätzlich für `status=ready` sichtbar (nutzt denselben
+  bereits vorhandenen `/reprocess`-Endpunkt) – u. a. relevant, falls nach
+  einem Restore nur die SQLite-DB, aber nicht der Chroma-Ordner
+  zurückgesichert wurde (siehe Backup & Restore oben).
 
 ## Persistenzstruktur
 
