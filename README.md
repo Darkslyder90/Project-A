@@ -19,10 +19,13 @@ Aktuell abgeschlossen:
    Embedding + Chroma-Speicherung (synchron, kein Background-Runner vor Schritt 8)
 4. ✅ Retrieval-Test ohne Claude (reine Vektorsuche über Chroma, projekt- und
    index-version-isoliert, mit UI zum manuellen Ausprobieren)
+5. ✅ Claude-Chat mit validierten Quellen (Source-IDs, Prompt-Injection-Schutz,
+   strikte Grounding-Regel, Refusal-Handling, API-Nutzungsprotokollierung –
+   noch ohne persistenten Konversationsverlauf, siehe Schritt 6)
 
-Alle weiteren Schritte (Chat, persistente Konversationen, Datei-Upload,
-Bildanalyse, Personen/Tasks/Meetings, Übersichtsseiten, Settings,
-Export/Import, Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
+Alle weiteren Schritte (persistente Konversationen, Datei-Upload, Bildanalyse,
+Personen/Tasks/Meetings, Übersichtsseiten, Settings, Export/Import,
+Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
 
 ## Lokale Entwicklung
 
@@ -129,6 +132,23 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   vorgesehene Trennung "Chroma = Vektor + Kern-Metadaten, SQLite = vollständiger
   Chunk-Datensatz" auch beim Retrieval ein, statt alles in Chroma zu duplizieren.
   Wird in Schritt 10 um den Keyword-Suchpfad (FTS5) und Fusion erweitert.
+- **Claude-API-Key-Auflösung (Schritt 5):** ausschließlich der optionale
+  `.env`-Fallback-Key (`CLAUDE_API_KEY`). Ein in der DB gespeicherter,
+  Fernet-verschlüsselter Key kommt erst mit der vollen Settings-Verwaltung in
+  Schritt 13 dazu – dann Reihenfolge DB-Key zuerst, `.env`-Key als Fallback,
+  wie im Briefing beschrieben. Ohne Key liefert der Chat-Endpunkt sauber
+  HTTP 503 statt eines Absturzes (siehe Briefing: "Claude-Ausfall darf App
+  nicht lahmlegen") – der Rest der App bleibt unberührt nutzbar.
+- **Default-Chatmodell `claude-opus-5`**, override via `.env`
+  (`CLAUDE_MODEL_DEFAULT`) möglich. Wird in Schritt 13 durch eine echte
+  Settings-UI ersetzt/ergänzt (`AppSettings.claude_model`).
+- **Schritt 5 ist bewusst noch einzügig (kein Konversationsverlauf):** jede
+  Chat-Anfrage ist in sich abgeschlossen, ohne vorherige Nachrichten als
+  Kontext. Schritt 6 baut die persistente Konversation (`ChatConversation`/
+  `ChatMessage`) direkt auf `chat_service.ask()` auf, indem frühere Turns aus
+  der DB gelesen und der Anthropic-`messages`-Liste vorangestellt werden.
+- **Retrieval für den Chat nutzt `final_k` direkt als Top-K der Vektorsuche**
+  (noch kein `candidate_k`/Fusion, da Hybrid Retrieval erst Schritt 10 kommt).
 
 ## Persistenzstruktur
 

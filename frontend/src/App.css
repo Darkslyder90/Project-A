@@ -319,3 +319,84 @@ button.danger {
   color: var(--color-text-muted);
   white-space: pre-wrap;
 }
+
+/* --- Chat --- */
+
+.chat-section {
+  margin-top: 2rem;
+}
+
+.chat-turns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.chat-turn {
+  display: flex;
+}
+
+.chat-turn--user {
+  justify-content: flex-end;
+}
+
+.chat-turn--assistant {
+  justify-content: flex-start;
+}
+
+.chat-turn-bubble {
+  max-width: 80%;
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.65rem 0.9rem;
+}
+
+.chat-turn--user .chat-turn-bubble {
+  background-color: rgba(91, 157, 255, 0.12);
+  border-color: rgba(91, 157, 255, 0.3);
+}
+
+.chat-turn-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.chat-sources {
+  list-style: none;
+  padding: 0;
+  margin: 0.6rem 0 0;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.chat-source-id {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.chat-warning {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-error);
+}
+
+.chat-input-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat-input-form input {
+  flex: 1;
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text);
+}

@@ -46,6 +46,21 @@ export type RetrievalHit = {
   abschnitt: string | null
 }
 
+export type ChatSource = {
+  source_id: string
+  document_id: number
+  document_titel: string
+  dokumentdatum: string | null
+  abschnitt: string | null
+  text: string
+}
+
+export type ChatResponse = {
+  antwort: string
+  quellen: ChatSource[]
+  unbekannte_zitate: string[]
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
@@ -82,5 +97,11 @@ export const api = {
     request<RetrievalHit[]>(`/api/projects/${projectId}/retrieval-test`, {
       method: 'POST',
       body: JSON.stringify({ query, top_k: topK }),
+    }),
+
+  askChat: (projectId: number, query: string) =>
+    request<ChatResponse>(`/api/projects/${projectId}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ query }),
     }),
 }

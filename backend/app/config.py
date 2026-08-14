@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # Optionaler Fallback-Claude-Key, falls in der DB keiner hinterlegt ist.
     claude_api_key: str | None = None
 
+    # Default-Chatmodell, solange es keine Settings-UI dafuer gibt (Schritt 13).
+    # claude-opus-5 als Default siehe Claude-API-Skill-Empfehlung; per .env
+    # ueberschreibbar, falls bewusst ein anderes Modell gewuenscht ist.
+    claude_model_default: str = "claude-opus-5"
+
     max_upload_size_mb: int = 50
 
     # Kommagetrennte Liste erlaubter Frontend-Origins (Dev: Vite-Dev-Server).

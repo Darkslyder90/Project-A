@@ -8,7 +8,9 @@ pydantic-settings==2.15.0
 cryptography==46.0.3
 
 # Schritt 3: Chunking + lokales Embedding + Vektor-DB.
-# Weitere Pakete (anthropic, pypdf, python-docx, ...) kommen in spaeteren
-# vertikalen Schritten dazu, wenn sie tatsaechlich gebraucht werden.
 sentence-transformers==5.7.0
 chromadb==1.5.9
+
+# Schritt 5: Claude-Chat. Weitere Pakete (pypdf, python-docx, ...) kommen in
+# spaeteren vertikalen Schritten dazu, wenn sie tatsaechlich gebraucht werden.
+anthropic==0.122.0

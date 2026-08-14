@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type Project } from '../api/client'
+import { ChatSection } from '../components/ChatSection'
 import { DocumentsSection } from '../components/DocumentsSection'
 import { RetrievalTestSection } from '../components/RetrievalTestSection'
 
@@ -40,10 +41,12 @@ export function ProjectHome({ projectId, onSwitch }: Props) {
 
       <DocumentsSection projectId={projectId} />
 
+      <ChatSection projectId={projectId} />
+
       <RetrievalTestSection projectId={projectId} />
 
       <p className="subtitle">
-        Weitere Funktionen (Chat, Personen, Aufgaben, Meetings) folgen in den nächsten Schritten.
+        Weitere Funktionen (Personen, Aufgaben, Meetings) folgen in den nächsten Schritten.
       </p>
     </div>
   )

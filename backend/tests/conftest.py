@@ -25,6 +25,11 @@ def test_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("ENV", "test")
     monkeypatch.setenv("EMBEDDING_MODEL_CACHE_DIR_OVERRIDE", str(_SHARED_EMBEDDING_CACHE))
+    # Fake-Key: reicht, damit claude_client._resolve_api_key() nicht mit
+    # ClaudeUnavailableError abbricht. Der eigentliche Anthropic-Client wird in
+    # Chat-Tests ohnehin gemockt (siehe tests/test_chat.py) - es geht hier nur
+    # nie ein echter Request raus.
+    monkeypatch.setenv("CLAUDE_API_KEY", "test-fake-key")
     get_settings.cache_clear()
     yield get_settings()
     get_settings.cache_clear()
