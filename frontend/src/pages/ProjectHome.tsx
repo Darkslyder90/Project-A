@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react'
 import { api, type Project } from '../api/client'
 import { ChatSection } from '../components/ChatSection'
 import { DocumentsSection } from '../components/DocumentsSection'
+import { MeetingsSection } from '../components/MeetingsSection'
+import { PeopleSection } from '../components/PeopleSection'
 import { RetrievalTestSection } from '../components/RetrievalTestSection'
+// Aufgaben-Section auf Nutzerwunsch erstmal wieder raus (siehe TasksSection.tsx,
+// Backend/API bleiben unveraendert bestehen) - moeglicherweise spaeter in
+// anderer Form/Platzierung wieder aktiviert.
+// import { TasksSection } from '../components/TasksSection'
 
 type Props = {
   projectId: number
@@ -41,13 +47,15 @@ export function ProjectHome({ projectId, onSwitch }: Props) {
 
       <DocumentsSection projectId={projectId} />
 
+      <PeopleSection projectId={projectId} />
+
+      {/* <TasksSection projectId={projectId} /> */}
+
+      <MeetingsSection projectId={projectId} />
+
       <ChatSection projectId={projectId} />
 
       <RetrievalTestSection projectId={projectId} />
-
-      <p className="subtitle">
-        Weitere Funktionen (Personen, Aufgaben, Meetings) folgen in den nächsten Schritten.
-      </p>
     </div>
   )
 }

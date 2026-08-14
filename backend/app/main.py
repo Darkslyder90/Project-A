@@ -8,8 +8,11 @@ from fastapi.responses import JSONResponse
 from app.api.routes.chat import router as chat_router
 from app.api.routes.documents import router as documents_router
 from app.api.routes.health import router as health_router
+from app.api.routes.meetings import router as meetings_router
+from app.api.routes.people import router as people_router
 from app.api.routes.projects import router as projects_router
 from app.api.routes.retrieval import router as retrieval_router
+from app.api.routes.tasks import router as tasks_router
 from app.background.recovery import recover_stuck_documents
 from app.background.task_runner import DocumentTaskRunner
 from app.config import Settings, get_settings
@@ -72,6 +75,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(documents_router)
     app.include_router(retrieval_router)
     app.include_router(chat_router)
+    app.include_router(people_router)
+    app.include_router(tasks_router)
+    app.include_router(meetings_router)
 
     return app
 

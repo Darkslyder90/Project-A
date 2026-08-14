@@ -108,6 +108,76 @@ export type SendMessageResponse = {
   nachricht: ChatMessage
 }
 
+export type Person = {
+  id: number
+  project_id: number
+  name: string
+  rolle: string | null
+  kontaktinfo: string | null
+  notizen: string | null
+}
+
+export type PersonCreateInput = {
+  name: string
+  rolle?: string | null
+  kontaktinfo?: string | null
+  notizen?: string | null
+}
+
+export type PersonUpdateInput = Partial<PersonCreateInput>
+
+export type TaskStatus = 'offen' | 'in_arbeit' | 'erledigt'
+
+export type Task = {
+  id: number
+  project_id: number
+  titel: string
+  beschreibung: string | null
+  status: TaskStatus
+  zugewiesen_an: number | null
+  faellig_am: string | null
+  dokument_ids: number[]
+}
+
+export type TaskCreateInput = {
+  titel: string
+  beschreibung?: string | null
+  status?: TaskStatus
+  zugewiesen_an?: number | null
+  faellig_am?: string | null
+  dokument_ids?: number[]
+}
+
+export type TaskUpdateInput = {
+  titel?: string
+  beschreibung?: string | null
+  status?: TaskStatus
+  zugewiesen_an?: number | null
+  faellig_am?: string | null
+}
+
+export type Meeting = {
+  id: number
+  project_id: number
+  datum: string
+  document_id: number | null
+  zusammenfassung: string | null
+  teilnehmer_ids: number[]
+}
+
+export type MeetingCreateInput = {
+  datum: string
+  document_id?: number | null
+  zusammenfassung?: string | null
+  teilnehmer_ids?: number[]
+}
+
+export type MeetingUpdateInput = {
+  datum?: string
+  zusammenfassung?: string | null
+  document_id?: number | null
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -175,6 +245,8 @@ export const api = {
   },
   documentFileUrl: (projectId: number, documentId: number) =>
     `/api/projects/${projectId}/documents/${documentId}/file`,
+  deleteDocument: (projectId: number, documentId: number) =>
+    request<void>(`/api/projects/${projectId}/documents/${documentId}`, { method: 'DELETE' }),
 
   testRetrieval: (projectId: number, query: string, topK = 5) =>
     request<RetrievalHit[]>(`/api/projects/${projectId}/retrieval-test`, {
@@ -204,4 +276,59 @@ export const api = {
       `/api/projects/${projectId}/chat/conversations/${conversationId}/messages`,
       { method: 'POST', body: JSON.stringify({ query }) },
     ),
+
+  listPeople: (projectId: number) => request<Person[]>(`/api/projects/${projectId}/people`),
+  createPerson: (projectId: number, input: PersonCreateInput) =>
+    request<Person>(`/api/projects/${projectId}/people`, { method: 'POST', body: JSON.stringify(input) }),
+  updatePerson: (projectId: number, personId: number, input: PersonUpdateInput) =>
+    request<Person>(`/api/projects/${projectId}/people/${personId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deletePerson: (projectId: number, personId: number) =>
+    request<void>(`/api/projects/${projectId}/people/${personId}`, { method: 'DELETE' }),
+
+  listTasks: (projectId: number, statusFilter?: TaskStatus) =>
+    request<Task[]>(
+      `/api/projects/${projectId}/tasks${statusFilter ? `?status_filter=${statusFilter}` : ''}`,
+    ),
+  createTask: (projectId: number, input: TaskCreateInput) =>
+    request<Task>(`/api/projects/${projectId}/tasks`, { method: 'POST', body: JSON.stringify(input) }),
+  updateTask: (projectId: number, taskId: number, input: TaskUpdateInput) =>
+    request<Task>(`/api/projects/${projectId}/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteTask: (projectId: number, taskId: number) =>
+    request<void>(`/api/projects/${projectId}/tasks/${taskId}`, { method: 'DELETE' }),
+  linkTaskDocument: (projectId: number, taskId: number, documentId: number) =>
+    request<Task>(`/api/projects/${projectId}/tasks/${taskId}/documents/${documentId}`, {
+      method: 'POST',
+    }),
+  unlinkTaskDocument: (projectId: number, taskId: number, documentId: number) =>
+    request<Task>(`/api/projects/${projectId}/tasks/${taskId}/documents/${documentId}`, {
+      method: 'DELETE',
+    }),
+
+  listMeetings: (projectId: number) => request<Meeting[]>(`/api/projects/${projectId}/meetings`),
+  createMeeting: (projectId: number, input: MeetingCreateInput) =>
+    request<Meeting>(`/api/projects/${projectId}/meetings`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateMeeting: (projectId: number, meetingId: number, input: MeetingUpdateInput) =>
+    request<Meeting>(`/api/projects/${projectId}/meetings/${meetingId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteMeeting: (projectId: number, meetingId: number) =>
+    request<void>(`/api/projects/${projectId}/meetings/${meetingId}`, { method: 'DELETE' }),
+  addMeetingParticipant: (projectId: number, meetingId: number, personId: number) =>
+    request<Meeting>(`/api/projects/${projectId}/meetings/${meetingId}/participants/${personId}`, {
+      method: 'POST',
+    }),
+  removeMeetingParticipant: (projectId: number, meetingId: number, personId: number) =>
+    request<Meeting>(`/api/projects/${projectId}/meetings/${meetingId}/participants/${personId}`, {
+      method: 'DELETE',
+    }),
 }

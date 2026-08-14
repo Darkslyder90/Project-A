@@ -48,9 +48,20 @@ Aktuell abgeschlossen:
     SAP-Transaktionscodes/Tabellen/Ticketnummern zuverlässig, auch wenn
     Embeddings dort schwächeln; Chat und Retrieval-Test-Ansicht nutzen
     denselben `hybrid_search()`-Pfad
+11. ✅ Personen/Tasks/Meetings: vollständiges CRUD inkl. der im Datenmodell
+    geforderten Join-Tabellen (`TaskDocument`, `MeetingParticipant`);
+    Personen-Löschung setzt Task-Zuweisungen auf `NULL` und entfernt
+    Meeting-Teilnahmen (DB-FK-Kaskaden); ein Meeting kann optional ein
+    Protokoll-Dokument tragen – ist eines gesetzt, kann es nicht separat
+    gelöscht werden, nur über das Löschen des gesamten Meetings (das dann
+    sein Dokument mitentfernt) – dafür jetzt auch generische
+    Dokument-Löschung (Soft-Delete + Chroma-/Chunk-/Datei-Cleanup). Backend
+    für Tasks ist vollständig fertig/getestet, der Aufgaben-Abschnitt in der
+    Oberfläche ist aber auf Nutzerwunsch aktuell auskommentiert (siehe
+    Technische Entscheidungen)
 
-Alle weiteren Schritte (Personen/Tasks/Meetings, Übersichtsseiten, Settings,
-Export/Import, Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
+Alle weiteren Schritte (Übersichtsseiten, Settings, Export/Import,
+Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
 
 ## Lokale Entwicklung
 
@@ -309,6 +320,49 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   RAG-Settings, nicht aus der am Index eingefrorenen Konfiguration** (anders
   als Embedding-Modell/Chunking) – sie sind reine Retrieval-Zeit-Parameter
   und beeinflussen nicht, wie der Index aufgebaut wurde.
+- **Generische Dokument-Löschung erst in Schritt 11 nachgezogen** (Soft-Delete
+  über `Document.deleted_at`, danach best-effort Cleanup von
+  TaskDocument-Zeilen, Chunks, Chroma-Vektoren, Originaldatei): das Briefing
+  ordnet Löschregeln zwar Punkt 6 zu, ein konkreter Endpunkt war aber bis
+  Schritt 11 nicht nötig – Meeting-Löschung (siehe unten) braucht ihn jetzt
+  zwingend, da das Pflicht-Dokument eines Meetings im selben Vorgang mit
+  entfernt werden muss.
+- **`Task.dokument_ids`/`Meeting.teilnehmer_ids` als reine Lese-Properties**
+  über `viewonly=True`-Relationships (`secondary=task_documents` bzw.
+  `secondary=meeting_participants`), nicht als eigenes DTO: Pydantics
+  `from_attributes=True` liest normale Python-Properties genauso wie
+  gemappte Spalten, damit bleiben `TaskRead`/`MeetingRead` einfache
+  Ein-Objekt-Serialisierungen ohne manuelles Zusammenbauen im Service. Die
+  eigentliche Pflege der Verknüpfung läuft weiterhin explizit über
+  `link_document`/`unlink_document` bzw. `add_participant`/`remove_participant`
+  (keine automatische Synchronisierung über die Relationship selbst).
+- **Meeting-Löschung: Reihenfolge Meeting zuerst, dann Dokument** – die
+  Meeting-Zeile muss aus der DB verschwunden sein, bevor
+  `document_service.delete_document()` aufgerufen wird, sonst blockiert dessen
+  eigene Meeting-Pflicht-Prüfung die Löschung des soeben verwaisten Dokuments.
+- **Task-/Meeting-Verknüpfungen proaktiv gegen Projektgrenzen geprüft**
+  (`zugewiesen_an`, `dokument_ids`, `teilnehmer_ids`, `document_id`): jede
+  referenzierte Person/jedes referenzierte Dokument muss zum selben Projekt
+  gehören, sonst `422`/`404` statt eines stillen Cross-Project-Links (siehe
+  Briefing: "Projektgrenzen strikt erzwingen").
+- **Ein Dokument, das bereits das Protokoll eines Meetings ist, kann kein
+  zweites Meeting mehr bekommen** – proaktiv geprüft (`409` mit Verweis auf
+  das bestehende Meeting) statt den DB-`UNIQUE`-Constraint auf
+  `Meeting.document_id` als rohen `IntegrityError` durchschlagen zu lassen.
+- **Korrektur nach Nutzer-Feedback: `Meeting.document_id` ist nachträglich
+  nullable geworden** (Migration `43ad9f389ced`) – ursprünglich als
+  Pflichtfeld analog zum Briefing-Vorschlag umgesetzt, auf ausdrücklichen
+  Wunsch aber auf "Meeting auch ohne Protokoll anlegbar" geändert. SQLite
+  erlaubt mehrere `NULL`-Werte in einer `UNIQUE`-Spalte, die 1:1-Regel
+  (höchstens ein Meeting pro Dokument) bleibt daher für tatsächlich gesetzte
+  Werte weiterhin über den Unique-Index erzwungen. `MeetingUpdate` erlaubt
+  jetzt zusätzlich, ein Protokoll-Dokument nachträglich zuzuweisen; die
+  Löschung eines Meetings ohne Dokument überspringt einfach den
+  `document_service.delete_document()`-Aufruf.
+- **Aufgaben-Abschnitt auf der Projektseite auf Nutzerwunsch erstmal wieder
+  entfernt** (`ProjectHome.tsx`, `<TasksSection>` auskommentiert statt
+  gelöscht) – Backend/API/Tests für Tasks bleiben vollständig bestehen,
+  falls die Funktion später an anderer Stelle/in anderer Form zurückkommt.
 
 ## Persistenzstruktur
 

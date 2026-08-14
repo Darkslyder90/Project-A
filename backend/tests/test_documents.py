@@ -141,6 +141,68 @@ def test_deleting_project_also_removes_its_chroma_collection(client, app):
     assert collection_name not in [c.name for c in chroma_client.list_collections()]
 
 
+def test_deleting_document_removes_chunks_chroma_and_file(client, app):
+    from app.db.models.document import Document
+    from app.retrieval.keyword_search import keyword_search
+
+    project_id = _create_project(client)
+    upload = client.post(
+        f"/api/projects/{project_id}/documents/upload",
+        files={"file": ("notiz.txt", b"Ein einzigartiger Begriff KANTALUPE55 im Text.", "text/plain")},
+        data={"typ": "notiz"},
+    ).json()
+    doc = wait_for_document_status(client, project_id, upload["id"])
+    assert doc["status"] == "ready"
+
+    settings = app.state.settings
+    with app.state.session_factory() as db:
+        original_dateipfad = db.get(Document, doc["id"]).original_dateipfad
+    file_path = settings.uploads_dir / original_dateipfad
+    assert file_path.is_file()
+
+    response = client.delete(f"/api/projects/{project_id}/documents/{doc['id']}")
+    assert response.status_code == 204
+
+    assert client.get(f"/api/projects/{project_id}/documents/{doc['id']}").status_code == 404
+    assert doc["id"] not in [d["id"] for d in client.get(f"/api/projects/{project_id}/documents").json()]
+    assert not file_path.exists()
+
+    with app.state.session_factory() as db:
+        assert db.query(Chunk).filter(Chunk.document_id == doc["id"]).count() == 0
+        assert keyword_search(db, project_id, "KANTALUPE55", top_k=5) == []
+
+    chroma_client = get_chroma_client(str(settings.chroma_dir))
+    collection = get_or_create_collection(chroma_client, f"project_{project_id}_v1")
+    assert collection.get(where={"document_id": doc["id"]})["ids"] == []
+
+
+def test_deleting_document_removes_only_task_link_not_the_task(client, app):
+    from app.db.models.task import TaskDocument
+
+    project_id = _create_project(client)
+    doc = client.post(
+        f"/api/projects/{project_id}/documents",
+        json={"typ": "notiz", "titel": "N", "inhalt": "Text."},
+    ).json()
+    wait_for_document_status(client, project_id, doc["id"])
+    task = client.post(
+        f"/api/projects/{project_id}/tasks", json={"titel": "T", "dokument_ids": [doc["id"]]}
+    ).json()
+    assert task["dokument_ids"] == [doc["id"]]
+
+    assert client.delete(f"/api/projects/{project_id}/documents/{doc['id']}").status_code == 204
+
+    task_after = client.get(f"/api/projects/{project_id}/tasks/{task['id']}").json()
+    assert task_after["dokument_ids"] == []
+    with app.state.session_factory() as db:
+        assert db.query(TaskDocument).count() == 0
+
+
+def test_deleting_unknown_document_returns_404(client):
+    project_id = _create_project(client)
+    assert client.delete(f"/api/projects/{project_id}/documents/999999").status_code == 404
+
+
 def test_whitespace_only_content_marks_document_failed_not_500(client):
     # Einzelnes Leerzeichen erfuellt min_length=1 (Schema-Ebene), ist aber nach
     # .strip() leer - muss von der Pipeline als "failed" abgefangen werden,

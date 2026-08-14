@@ -74,6 +74,11 @@ def download_document_file(
     return FileResponse(path=path, media_type=media_type, filename=filename)
 
 
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(project_id: int, document_id: int, db: Session = Depends(get_db)) -> None:
+    document_service.delete_document(db, project_id, document_id)
+
+
 @router.post("/{document_id}/reprocess", response_model=DocumentRead)
 def reprocess_document(
     project_id: int,

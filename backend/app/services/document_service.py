@@ -1,5 +1,6 @@
 import hashlib
-from datetime import date
+import logging
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -7,8 +8,13 @@ from sqlalchemy.orm import Session
 from app.background.task_runner import DocumentTaskRunner
 from app.config import get_settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
+from app.db.models.chunk import Chunk
 from app.db.models.document import Document
 from app.db.models.enums import DocumentStatus, DocumentType
+from app.db.models.index_metadata import IndexMetadata
+from app.db.models.meeting import Meeting
+from app.db.models.task import TaskDocument
+from app.indexing.chroma_client import get_chroma_client, get_or_create_collection
 from app.security.file_safety import (
     IMAGE_EXTENSIONS,
     build_storage_relative_path,
@@ -17,6 +23,8 @@ from app.security.file_safety import (
     validate_extension,
 )
 from app.services.project_service import get_project
+
+logger = logging.getLogger(__name__)
 
 
 def list_documents(db: Session, project_id: int) -> list[Document]:
@@ -239,3 +247,50 @@ def confirm_image_review(
     # Extraktion/Vision-Analyse, indexiert also direkt.
     task_runner.enqueue(document.id)
     return document
+
+
+def delete_document(db: Session, project_id: int, document_id: int) -> None:
+    """Loescht ein Dokument (siehe Briefing Punkt 6: fehlertolerante, idempotente
+    Loeschstrategie statt einer unrealistischen Cross-Store-ACID-Transaktion).
+
+    Blockiert, wenn das Dokument das Pflicht-Protokoll eines Meetings ist -
+    dafuer muss stattdessen das Meeting geloescht werden (siehe meeting_service,
+    das dieses Dokument dann im selben Vorgang mit entfernt).
+
+    Ablauf: zuerst Soft-Delete (Document.deleted_at, macht das Dokument sofort
+    fachlich unsichtbar - list_documents/get_document filtern bereits darauf),
+    danach best-effort externe Artefakte bereinigen (TaskDocument-Verknuepfungen,
+    Chunks, Chroma-Vektoren, Originaldatei). Ein erneuter Aufruf nach einem
+    fehlgeschlagenen Cleanup-Schritt ist gefahrlos moeglich, jeder Schritt ist
+    fuer sich idempotent.
+    """
+    document = get_document(db, project_id, document_id)
+
+    blocking_meeting = db.query(Meeting).filter(Meeting.document_id == document_id).first()
+    if blocking_meeting is not None:
+        raise ConflictError(
+            f"Dieses Dokument ist das Meeting-Protokoll von Meeting {blocking_meeting.id} "
+            f"(Datum {blocking_meeting.datum}) und kann nicht separat geloescht werden - "
+            "loesche stattdessen das Meeting."
+        )
+
+    document.deleted_at = datetime.now(UTC)
+    db.commit()
+
+    db.query(TaskDocument).filter(TaskDocument.document_id == document_id).delete()
+    db.query(Chunk).filter(Chunk.document_id == document_id).delete()
+    db.commit()
+
+    settings = get_settings()
+    index_meta = db.get(IndexMetadata, project_id)
+    if index_meta and index_meta.active_collection_name:
+        try:
+            client = get_chroma_client(str(settings.chroma_dir))
+            collection = get_or_create_collection(client, index_meta.active_collection_name)
+            collection.delete(where={"document_id": document_id})
+        except Exception:  # noqa: BLE001 - best-effort, DB-Loeschung ist bereits fachlich wirksam
+            logger.exception("Chroma-Cleanup fuer Document %s fehlgeschlagen", document_id)
+
+    if document.original_dateipfad:
+        absolute_path = settings.uploads_dir / document.original_dateipfad
+        absolute_path.unlink(missing_ok=True)

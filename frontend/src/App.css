@@ -420,6 +420,138 @@ button.danger {
   margin: 0.5rem 0;
 }
 
+/* --- Personen / Aufgaben / Meetings --- */
+
+.create-person-form,
+.create-task-form,
+.create-meeting-form,
+.entity-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.create-person-form .form-row,
+.create-task-form .form-row,
+.create-meeting-form .form-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.create-person-form select,
+.create-person-form input,
+.create-person-form textarea,
+.create-task-form select,
+.create-task-form input,
+.create-task-form textarea,
+.create-meeting-form select,
+.create-meeting-form input,
+.create-meeting-form textarea,
+.entity-edit-form select,
+.entity-edit-form input,
+.entity-edit-form textarea {
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text);
+  font-family: inherit;
+}
+
+.create-person-form input[type='text'],
+.create-task-form input[type='text'],
+.entity-edit-form input[type='text'] {
+  flex: 1;
+  min-width: 160px;
+}
+
+.create-person-form textarea,
+.create-task-form textarea,
+.create-meeting-form textarea,
+.entity-edit-form textarea {
+  resize: vertical;
+}
+
+.create-person-form button,
+.create-task-form button,
+.create-meeting-form button {
+  align-self: flex-start;
+}
+
+.form-field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.form-field-label select {
+  min-height: 4.5rem;
+}
+
+.task-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.entity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.entity-list-item {
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.entity-list-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.entity-title {
+  font-weight: 600;
+}
+
+.entity-meta {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-top: 0.15rem;
+}
+
+.entity-notes {
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+}
+
+.entity-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.entity-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .chat-rename-form input {
   flex: 1;
   background-color: var(--color-bg-elevated);

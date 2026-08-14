@@ -49,6 +49,7 @@ export function DocumentsSection({ projectId }: Props) {
   const [dokumentdatum, setDokumentdatum] = useState('')
   const [creating, setCreating] = useState(false)
   const [reprocessingId, setReprocessingId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const [mode, setMode] = useState<'manuell' | 'datei' | 'bild'>('manuell')
   const [uploadTyp, setUploadTyp] = useState<DocumentType>('notiz')
@@ -209,6 +210,22 @@ export function DocumentsSection({ projectId }: Props) {
       setError((err as Error).message)
     } finally {
       setReprocessingId(null)
+    }
+  }
+
+  const handleDelete = async (documentId: number) => {
+    if (!confirm('Dieses Dokument wirklich löschen?')) return
+    setDeletingId(documentId)
+    setError(null)
+    try {
+      await api.deleteDocument(projectId, documentId)
+      setDocuments((prev) => prev?.filter((d) => d.id !== documentId) ?? null)
+    } catch (err) {
+      // 409: Dokument ist das Protokoll eines Meetings (siehe Briefing) - klare
+      // Fehlermeldung statt eines generischen Fehlschlags.
+      setError((err as Error).message)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -376,6 +393,15 @@ export function DocumentsSection({ projectId }: Props) {
                   </a>
                 </>
               )}
+            </div>
+            <div className="entity-actions">
+              <button
+                className="link-button"
+                disabled={deletingId === doc.id}
+                onClick={() => handleDelete(doc.id)}
+              >
+                {deletingId === doc.id ? 'Wird gelöscht …' : 'Löschen'}
+              </button>
             </div>
             {doc.status === 'failed' && (
               <div className="document-error">
