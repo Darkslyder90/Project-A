@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError, api, type Document, type DocumentType } from '../api/client'
 
 type Props = {
   projectId: number
 }
+
+const ACTIVE_STATUSES: Document['status'][] = ['pending', 'processing', 'indexing']
 
 const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   meeting: 'Meeting',
@@ -55,6 +57,29 @@ export function DocumentsSection({ projectId }: Props) {
     setDocuments(null)
     loadDocuments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
+  // Seit Schritt 8 laeuft die Verarbeitung asynchron im Hintergrund - solange
+  // mindestens ein Dokument noch nicht in einem Endzustand ist, wird die Liste
+  // periodisch neu geladen, damit Status-Badges automatisch aktuell bleiben.
+  const documentsRef = useRef<Document[] | null>(null)
+  useEffect(() => {
+    documentsRef.current = documents
+  }, [documents])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const current = documentsRef.current
+      const hasActiveDocument = current?.some((d) => ACTIVE_STATUSES.includes(d.status))
+      if (!hasActiveDocument) return
+      api
+        .listDocuments(projectId)
+        .then(setDocuments)
+        .catch(() => {
+          // Polling-Fehler ignorieren, der naechste Tick versucht es erneut.
+        })
+    }, 1500)
+    return () => clearInterval(interval)
   }, [projectId])
 
   const handleCreate = async (event: React.FormEvent) => {

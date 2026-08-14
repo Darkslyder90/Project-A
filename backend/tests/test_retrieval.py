@@ -1,12 +1,18 @@
+from tests.helpers import wait_for_document_status
+
+
 def _create_project(client, name: str) -> int:
     return client.post("/api/projects", json={"name": name}).json()["id"]
 
 
 def _create_document(client, project_id: int, titel: str, inhalt: str) -> dict:
-    return client.post(
+    created = client.post(
         f"/api/projects/{project_id}/documents",
         json={"typ": "notiz", "titel": titel, "inhalt": inhalt},
     ).json()
+    # Seit Schritt 8 laeuft die Indexierung asynchron - Aufrufer erwarten aber
+    # ein bereits durchsuchbares Dokument (Retrieval-Tests).
+    return wait_for_document_status(client, project_id, created["id"])
 
 
 def test_retrieval_finds_semantically_relevant_chunk(client):

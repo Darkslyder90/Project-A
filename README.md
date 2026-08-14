@@ -26,12 +26,18 @@ Aktuell abgeschlossen:
    Dokumente, Nutzer-Nachricht bleibt auch bei Claude-Ausfall erhalten)
 7. ✅ Datei-Upload (PDF/DOCX/TXT/MD) + Textextraktion, Duplikatserkennung
    (SHA-256, mit bewusstem "trotzdem hochladen"), sichere Dateipfade,
-   Datei-Download mit korrekten Headern – nutzt dieselbe synchrone
+   Datei-Download mit korrekten Headern – nutzt dieselbe
    `process_document`-Pipeline wie manuelle Einträge (Schritt 3)
+8. ✅ Asynchrone Ingestion + Status/Recovery: `process_document` läuft nicht
+   mehr synchron im Request, sondern über einen sequenziellen
+   Hintergrund-Worker (`asyncio.Queue`); Dokumente sind nach dem Anlegen
+   sofort `pending`, das Frontend pollt den Status; Crash-Recovery beim
+   Start setzt hängende `processing`/`indexing`-Dokumente zurück auf
+   `pending` und stößt sie erneut an
 
-Alle weiteren Schritte (asynchrone Verarbeitung, Bildanalyse,
-Personen/Tasks/Meetings, Übersichtsseiten, Settings, Export/Import,
-Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
+Alle weiteren Schritte (Bildanalyse, Personen/Tasks/Meetings,
+Übersichtsseiten, Settings, Export/Import, Backup/Update,
+Docker/Prod-Deployment) folgen schrittweise.
 
 ## Lokale Entwicklung
 
@@ -193,6 +199,30 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   noch `None` ist und `original_dateipfad` gesetzt ist) – dieselbe Pipeline
   bedient damit sowohl manuelle Einträge (Schritt 3, `inhalt` schon gesetzt)
   als auch Datei-Uploads (Schritt 7), ohne Sonderfall-Code im Aufrufer.
+- **Ein einzelner sequenzieller Worker statt eines Thread-/Prozess-Pools**
+  (`DocumentTaskRunner`, `asyncio.Queue` + genau ein `_worker_loop`-Task):
+  vermeidet jede Nebenläufigkeitsfrage rund um den geteilten
+  Embedder/Chroma-Client (Prozess-weiter Cache, siehe Schritt 3) und passt
+  zum Anspruch "eine Ingestion nach der anderen" aus dem Briefing. CPU-lastige
+  Arbeit (Chunking/Embedding) läuft dabei via `asyncio.to_thread` in einem
+  Thread, damit der Worker den Event-Loop nicht blockiert und der Server
+  parallel weiter auf Requests antworten kann. Skalierung auf mehrere Worker
+  oder eine echte Queue (Redis/RQ o. Ä.) bleibt eine spätere Option, ohne dass
+  `process_document(db, document_id)` sich ändern müsste.
+- **Enqueue statt synchronem Aufruf:** alle drei Stellen, die vorher
+  `process_document()` direkt aufgerufen haben (manuelles Anlegen, Upload,
+  "erneut verarbeiten"), rufen jetzt `task_runner.enqueue(document_id)` auf;
+  der Request kehrt sofort mit Status `pending` zurück. Das Frontend pollt
+  (1,5 s) die Dokumentliste, solange mindestens ein Dokument in einem
+  Nicht-Endzustand ist.
+- **Crash-Recovery beim Start** (`recover_stuck_documents`, in der FastAPI
+  `lifespan`-Funktion vor dem ersten Request ausgeführt): Dokumente, die noch
+  `processing`/`indexing` sind, können nur von einem Worker stammen, der beim
+  letzten Absturz/Neustart verloren ging – sie werden auf `pending`
+  zurückgesetzt (inkl. Löschen einer eventuellen alten Fehlermeldung) und wie
+  alle noch `pending` gebliebenen Dokumente erneut in die Queue gestellt.
+  Damit kann laut Briefing kein Dokument dauerhaft in einem hängenden Zustand
+  stecken bleiben.
 
 ## Persistenzstruktur
 

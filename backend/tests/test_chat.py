@@ -1,4 +1,5 @@
 from app.chat import claude_client as claude_client_module
+from tests.helpers import wait_for_document_status
 
 
 class _FakeTextBlock:
@@ -49,14 +50,17 @@ def _patch_claude(monkeypatch, text: str, stop_reason: str = "end_turn") -> _Fak
 
 def _create_project_with_doc(client) -> int:
     project_id = client.post("/api/projects", json={"name": "Chat-Testprojekt"}).json()["id"]
-    client.post(
+    doc = client.post(
         f"/api/projects/{project_id}/documents",
         json={
             "typ": "notiz",
             "titel": "Ansprechpartner",
             "inhalt": "Der SAP-Support-Ansprechpartner fuer VA02-Probleme ist Frau Weber.",
         },
-    )
+    ).json()
+    # Seit Schritt 8 laeuft die Indexierung asynchron - der Chat braucht das
+    # Dokument aber bereits durchsuchbar (fuer die Quellen-Zuordnung [S1]).
+    wait_for_document_status(client, project_id, doc["id"])
     return project_id
 
 

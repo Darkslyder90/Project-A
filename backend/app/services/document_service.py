@@ -4,11 +4,11 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.background.task_runner import DocumentTaskRunner
 from app.config import get_settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
 from app.db.models.document import Document
 from app.db.models.enums import DocumentStatus, DocumentType
-from app.ingestion.pipeline import process_document
 from app.security.file_safety import (
     build_storage_relative_path,
     looks_like_plausible_content,
@@ -51,6 +51,7 @@ def create_manual_document(
     titel: str,
     inhalt: str,
     dokumentdatum: date | None,
+    task_runner: DocumentTaskRunner,
 ) -> Document:
     get_project(db, project_id)  # 404, falls Projekt nicht existiert (statt IntegrityError)
 
@@ -66,11 +67,11 @@ def create_manual_document(
     db.commit()
     db.refresh(document)
 
-    # Schritt 3: synchron verarbeiten (Background-Task-Runner kommt erst in
-    # Schritt 8). process_document ist bereits so gebaut, dass sie unveraendert
-    # asynchron aufgerufen werden kann, sobald der Runner existiert.
-    process_document(db, document.id)
-    db.refresh(document)
+    # Schritt 8: asynchron im Hintergrund verarbeiten - der HTTP-Request
+    # blockiert nie auf Chunking/Embedding (siehe Briefing). Der Client bekommt
+    # das Document sofort mit status=pending zurueck und pollt/beobachtet den
+    # Fortschritt ueber GET .../documents/{id}.
+    task_runner.enqueue(document.id)
     return document
 
 
@@ -95,12 +96,14 @@ def create_uploaded_document(
     dokumentdatum: date | None,
     original_filename: str,
     content: bytes,
+    task_runner: DocumentTaskRunner,
     force_duplicate: bool = False,
 ) -> Document:
     """Legt ein Document aus einer hochgeladenen Datei an. Inhalt bleibt
-    zunaechst leer - die eigentliche Textextraktion passiert synchron in
-    process_document() (siehe Briefing: Text bleibt bei Textdokumenten immer
-    der extrahierte Originaltext; Bild-Analyse kommt erst Schritt 9).
+    zunaechst leer - die eigentliche Textextraktion passiert asynchron im
+    Hintergrund in process_document() (siehe Briefing: Text bleibt bei
+    Textdokumenten immer der extrahierte Originaltext; Bild-Analyse kommt erst
+    Schritt 9).
     """
     get_project(db, project_id)
 
@@ -154,8 +157,7 @@ def create_uploaded_document(
     db.commit()
     db.refresh(document)
 
-    process_document(db, document.id)
-    db.refresh(document)
+    task_runner.enqueue(document.id)
     return document
 
 
@@ -179,8 +181,17 @@ def get_file_path(db: Session, project_id: int, document_id: int) -> tuple[Path,
     return absolute_path, media_type, filename
 
 
-def reprocess_document(db: Session, project_id: int, document_id: int) -> Document:
+def reprocess_document(
+    db: Session, project_id: int, document_id: int, task_runner: DocumentTaskRunner
+) -> Document:
     document = get_document(db, project_id, document_id)
-    process_document(db, document.id)
+    # Sofort auf 'pending' zuruecksetzen (statt z. B. bei 'failed' zu bleiben,
+    # bis der Worker den Auftrag abholt) - konsistent mit der Statuskette und
+    # gibt dem Client direktes Feedback, dass ein neuer Versuch begonnen hat.
+    document.status = DocumentStatus.PENDING
+    document.fehlermeldung = None
+    db.commit()
     db.refresh(document)
+
+    task_runner.enqueue(document.id)
     return document

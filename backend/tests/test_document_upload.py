@@ -1,5 +1,7 @@
 import io
 
+from tests.helpers import wait_for_document_status
+
 
 def _build_minimal_pdf_bytes(text: str) -> bytes:
     """Erzeugt ein minimales, aber korrekt referenziertes Ein-Seiten-PDF mit
@@ -70,10 +72,13 @@ def test_upload_txt_document_becomes_ready(client):
     )
 
     assert response.status_code == 201
-    body = response.json()
+    created = response.json()
+    assert created["status"] == "pending"  # Extraktion+Indexierung laufen asynchron (Schritt 8)
+    assert created["dateiname"] == "notiz.txt"
+    assert created["titel"] == "notiz"  # aus Dateinamen abgeleitet, da kein Titel angegeben
+
+    body = wait_for_document_status(client, project_id, created["id"])
     assert body["status"] == "ready"
-    assert body["dateiname"] == "notiz.txt"
-    assert body["titel"] == "notiz"  # aus Dateinamen abgeleitet, da kein Titel angegeben
     assert "Frau Weber" in body["inhalt"]
     assert body["dokumentdatum"] is not None  # Upload-Zeitpunkt als Vorbelegung
 
@@ -88,7 +93,9 @@ def test_upload_pdf_document_extracts_text(client):
     )
 
     assert response.status_code == 201
-    body = response.json()
+    created = response.json()
+
+    body = wait_for_document_status(client, project_id, created["id"])
     assert body["status"] == "ready"
     assert "Weber" in body["inhalt"]
 
@@ -117,7 +124,9 @@ def test_upload_docx_document_preserves_headings_for_chunking(client, app):
     )
 
     assert response.status_code == 201
-    body = response.json()
+    created = response.json()
+
+    body = wait_for_document_status(client, project_id, created["id"])
     assert body["status"] == "ready"
     assert "# Abschnitt Eins" in body["inhalt"]
     assert "# Abschnitt Zwei" in body["inhalt"]

@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_task_runner
 from app.api.schemas.document import DocumentCreate, DocumentRead
+from app.background.task_runner import DocumentTaskRunner
 from app.db.models.enums import DocumentType
 from app.services import document_service
 
@@ -18,7 +19,12 @@ def list_documents(project_id: int, db: Session = Depends(get_db)) -> list[Docum
 
 
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
-def create_document(project_id: int, payload: DocumentCreate, db: Session = Depends(get_db)) -> DocumentRead:
+def create_document(
+    project_id: int,
+    payload: DocumentCreate,
+    db: Session = Depends(get_db),
+    task_runner: DocumentTaskRunner = Depends(get_task_runner),
+) -> DocumentRead:
     return document_service.create_manual_document(
         db,
         project_id,
@@ -26,6 +32,7 @@ def create_document(project_id: int, payload: DocumentCreate, db: Session = Depe
         titel=payload.titel,
         inhalt=payload.inhalt,
         dokumentdatum=payload.dokumentdatum,
+        task_runner=task_runner,
     )
 
 
@@ -38,6 +45,7 @@ async def upload_document(
     dokumentdatum: date | None = Form(default=None),
     force: bool = Form(default=False),
     db: Session = Depends(get_db),
+    task_runner: DocumentTaskRunner = Depends(get_task_runner),
 ) -> DocumentRead:
     content = await file.read()
     return document_service.create_uploaded_document(
@@ -49,6 +57,7 @@ async def upload_document(
         original_filename=file.filename or "upload",
         content=content,
         force_duplicate=force,
+        task_runner=task_runner,
     )
 
 
@@ -66,5 +75,10 @@ def download_document_file(
 
 
 @router.post("/{document_id}/reprocess", response_model=DocumentRead)
-def reprocess_document(project_id: int, document_id: int, db: Session = Depends(get_db)) -> DocumentRead:
-    return document_service.reprocess_document(db, project_id, document_id)
+def reprocess_document(
+    project_id: int,
+    document_id: int,
+    db: Session = Depends(get_db),
+    task_runner: DocumentTaskRunner = Depends(get_task_runner),
+) -> DocumentRead:
+    return document_service.reprocess_document(db, project_id, document_id, task_runner)

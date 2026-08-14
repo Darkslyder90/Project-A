@@ -1,6 +1,7 @@
 from app.db.models.chunk import Chunk
 from app.db.models.index_metadata import IndexMetadata
 from app.indexing.chroma_client import get_chroma_client, get_or_create_collection
+from tests.helpers import wait_for_document_status
 
 
 def _create_project(client) -> int:
@@ -20,7 +21,10 @@ def test_create_manual_document_becomes_ready_and_is_chunked(client, app):
     )
 
     assert response.status_code == 201
-    body = response.json()
+    created = response.json()
+    assert created["status"] == "pending"  # Verarbeitung laeuft asynchron im Hintergrund (Schritt 8)
+
+    body = wait_for_document_status(client, project_id, created["id"])
     assert body["status"] == "ready"
     assert body["fehlermeldung"] is None
 
@@ -47,13 +51,17 @@ def test_reprocessing_document_does_not_duplicate_chunks(client, app):
         f"/api/projects/{project_id}/documents",
         json={"typ": "notiz", "titel": "N", "inhalt": "Ein Satz zum Testen der Idempotenz."},
     ).json()
+    wait_for_document_status(client, project_id, doc["id"])
 
     with app.state.session_factory() as db:
         first_count = db.query(Chunk).filter(Chunk.document_id == doc["id"]).count()
 
     reprocessed = client.post(f"/api/projects/{project_id}/documents/{doc['id']}/reprocess")
     assert reprocessed.status_code == 200
-    assert reprocessed.json()["status"] == "ready"
+    assert reprocessed.json()["status"] == "pending"
+
+    body = wait_for_document_status(client, project_id, doc["id"])
+    assert body["status"] == "ready"
 
     with app.state.session_factory() as db:
         second_count = db.query(Chunk).filter(Chunk.document_id == doc["id"]).count()
@@ -68,14 +76,16 @@ def test_reprocessing_document_does_not_duplicate_chunks(client, app):
 
 def test_two_documents_in_same_project_share_index_version(client, app):
     project_id = _create_project(client)
-    client.post(
+    doc1 = client.post(
         f"/api/projects/{project_id}/documents",
         json={"typ": "notiz", "titel": "N1", "inhalt": "Erster Text."},
-    )
-    client.post(
+    ).json()
+    doc2 = client.post(
         f"/api/projects/{project_id}/documents",
         json={"typ": "notiz", "titel": "N2", "inhalt": "Zweiter Text."},
-    )
+    ).json()
+    wait_for_document_status(client, project_id, doc1["id"])
+    wait_for_document_status(client, project_id, doc2["id"])
 
     with app.state.session_factory() as db:
         versions = {c.index_version for c in db.query(Chunk).all()}
@@ -115,10 +125,11 @@ def test_empty_content_is_rejected_by_schema_validation(client):
 
 def test_deleting_project_also_removes_its_chroma_collection(client, app):
     project_id = _create_project(client)
-    client.post(
+    doc = client.post(
         f"/api/projects/{project_id}/documents",
         json={"typ": "notiz", "titel": "N", "inhalt": "Text, der embedded wird."},
-    )
+    ).json()
+    wait_for_document_status(client, project_id, doc["id"])
 
     settings = app.state.settings
     chroma_client = get_chroma_client(str(settings.chroma_dir))
@@ -135,11 +146,11 @@ def test_whitespace_only_content_marks_document_failed_not_500(client):
     # .strip() leer - muss von der Pipeline als "failed" abgefangen werden,
     # nicht als 500er crashen (siehe Briefing: Fehlertoleranz).
     project_id = _create_project(client)
-    response = client.post(
+    created = client.post(
         f"/api/projects/{project_id}/documents",
         json={"typ": "notiz", "titel": "Leer", "inhalt": " "},
-    )
-    assert response.status_code == 201
-    body = response.json()
+    ).json()
+
+    body = wait_for_document_status(client, project_id, created["id"])
     assert body["status"] == "failed"
     assert "kein indexierbarer inhalt" in body["fehlermeldung"].lower()
