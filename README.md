@@ -17,9 +17,11 @@ Aktuell abgeschlossen:
 2. ✅ Projektverwaltung (anlegen, auswählen, umbenennen/Beschreibung ändern, löschen)
 3. ✅ Manuelle Textdokumente + Chunking (struktur-/sprecher-/tokenbasiert) + lokales
    Embedding + Chroma-Speicherung (synchron, kein Background-Runner vor Schritt 8)
+4. ✅ Retrieval-Test ohne Claude (reine Vektorsuche über Chroma, projekt- und
+   index-version-isoliert, mit UI zum manuellen Ausprobieren)
 
-Alle weiteren Schritte (Retrieval-Test, Chat, persistente Konversationen,
-Datei-Upload, Bildanalyse, Personen/Tasks/Meetings, Übersichtsseiten, Settings,
+Alle weiteren Schritte (Chat, persistente Konversationen, Datei-Upload,
+Bildanalyse, Personen/Tasks/Meetings, Übersichtsseiten, Settings,
 Export/Import, Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
 
 ## Lokale Entwicklung
@@ -116,6 +118,17 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   Löschung bestehender Chunks vor Neuaufbau) – Schritt 3 ruft sie nur
   synchron direkt nach dem Anlegen auf; ein Background-Task-Runner (Schritt 8)
   kann sie unverändert übernehmen.
+- **Projekt-Löschung räumt jetzt auch die Chroma-Collection auf** (Nachtrag zu
+  Schritt 2, da Chroma erst seit Schritt 3 existiert) – `IndexMetadata` wird
+  vor dem Löschen der Projekt-Zeile gelesen, um den Collection-Namen zu
+  kennen, dann DB-Zeile löschen (FK-Kaskaden), dann Uploads-Verzeichnis und
+  Chroma-Collection best-effort bereinigen.
+- **`retrieval/vector_search.py`** liefert nur Kern-Metadaten aus Chroma
+  (chunk_id, document_id, Rang, Score); `services/retrieval_service.py`
+  reichert damit aus SQLite (Chunk/Document) an – hält die im Briefing
+  vorgesehene Trennung "Chroma = Vektor + Kern-Metadaten, SQLite = vollständiger
+  Chunk-Datensatz" auch beim Retrieval ein, statt alles in Chroma zu duplizieren.
+  Wird in Schritt 10 um den Keyword-Suchpfad (FTS5) und Fusion erweitert.
 
 ## Persistenzstruktur
 

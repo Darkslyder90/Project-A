@@ -249,3 +249,73 @@ button.danger {
   background-color: rgba(91, 157, 255, 0.15);
   color: var(--color-accent);
 }
+
+/* --- Retrieval test --- */
+
+.retrieval-test-section {
+  margin-top: 2rem;
+}
+
+.retrieval-test-form {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.retrieval-test-form input {
+  flex: 1;
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text);
+}
+
+.retrieval-hit-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.retrieval-hit {
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.retrieval-hit-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+
+.retrieval-hit-rank {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.retrieval-hit-title {
+  font-weight: 600;
+}
+
+.retrieval-hit-section,
+.retrieval-hit-score {
+  color: var(--color-text-muted);
+}
+
+.retrieval-hit-score {
+  margin-left: auto;
+}
+
+.retrieval-hit-text {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+}

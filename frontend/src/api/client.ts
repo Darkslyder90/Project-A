@@ -34,6 +34,18 @@ export type DocumentCreateInput = {
   dokumentdatum?: string | null
 }
 
+export type RetrievalHit = {
+  chunk_id: string
+  document_id: number
+  document_titel: string
+  vector_rank: number
+  vector_score: number
+  text: string
+  dokumenttyp: DocumentType | null
+  dokumentdatum: string | null
+  abschnitt: string | null
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
@@ -64,5 +76,11 @@ export const api = {
   reprocessDocument: (projectId: number, documentId: number) =>
     request<Document>(`/api/projects/${projectId}/documents/${documentId}/reprocess`, {
       method: 'POST',
+    }),
+
+  testRetrieval: (projectId: number, query: string, topK = 5) =>
+    request<RetrievalHit[]>(`/api/projects/${projectId}/retrieval-test`, {
+      method: 'POST',
+      body: JSON.stringify({ query, top_k: topK }),
     }),
 }
