@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # Optionaler Override, falls die DB nicht unter data_dir/project-a.db liegen soll.
     database_url: str | None = None
 
+    # Optionaler Override fuer den Embedding-Modell-Cache (Default: data_dir/embedding-model-cache).
+    # Separat overridebar, damit z. B. Tests mit eigenem, isoliertem data_dir
+    # trotzdem den bereits heruntergeladenen Modell-Cache mitbenutzen koennen,
+    # statt bei jedem Testlauf neu herunterzuladen (siehe tests/conftest.py).
+    embedding_model_cache_dir_override: Path | None = None
+
     # Fernet-Key zur Verschluesselung des in SQLite gespeicherten Claude-API-Keys.
     # Bewusst NICHT in der DB, siehe Briefing "Encryption-Secret explizit ausgenommen".
     # Fehlt er, startet die App trotzdem (Claude-Ausfall darf App nicht lahmlegen) -
@@ -55,7 +61,7 @@ class Settings(BaseSettings):
 
     @property
     def embedding_model_cache_dir(self) -> Path:
-        return self.data_dir / "embedding-model-cache"
+        return self.embedding_model_cache_dir_override or (self.data_dir / "embedding-model-cache")
 
     @property
     def backups_dir(self) -> Path:

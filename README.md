@@ -15,8 +15,10 @@ Aktuell abgeschlossen:
 
 1. ✅ Grundstruktur, DB-Modelle, Alembic-Migrationen, Healthcheck
 2. ✅ Projektverwaltung (anlegen, auswählen, umbenennen/Beschreibung ändern, löschen)
+3. ✅ Manuelle Textdokumente + Chunking (struktur-/sprecher-/tokenbasiert) + lokales
+   Embedding + Chroma-Speicherung (synchron, kein Background-Runner vor Schritt 8)
 
-Alle weiteren Schritte (Dokumente/Chunking/Embedding, Retrieval, Chat,
+Alle weiteren Schritte (Retrieval-Test, Chat, persistente Konversationen,
 Datei-Upload, Bildanalyse, Personen/Tasks/Meetings, Übersichtsseiten, Settings,
 Export/Import, Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
 
@@ -40,6 +42,12 @@ copy .env.example .env   # optional, Defaults reichen meist
 Healthcheck: http://127.0.0.1:8000/health
 
 Tests: `.venv\Scripts\python.exe -m pytest`
+
+Hinweis: Beim ersten Anlegen eines Dokuments (bzw. beim ersten Testlauf, der
+Chunking/Embedding braucht) lädt sentence-transformers das lokale
+Embedding-Modell (`intfloat/multilingual-e5-base`, ca. 1 GB) einmalig nach
+`data-dev/embedding-model-cache/` herunter – das kann etwas dauern, ist danach
+aber dauerhaft gecacht.
 
 ### Frontend
 
@@ -89,6 +97,25 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
 - **Denormalisierte `meeting_datum`/`meeting_teilnehmer` an Chunks** werden bei
   Änderung der Meeting-Verknüpfung/Teilnehmerliste automatisch durch Reindex
   des einen betroffenen Documents aktualisiert (Details folgen in Schritt 11).
+- **Chunking-Dispatch (Schritt 3):** Meeting-Dokumente mit erkennbaren
+  Sprecherwechseln (`Name: Text` am Zeilenanfang, ≥3 Treffer) nutzen den
+  Sprecher-Chunker; Texte mit Markdown-Überschriften (`#`/`##`/`###`, ≥2
+  Treffer) den Struktur-Chunker; alles andere den tokenbasierten Fallback.
+  Alle drei nutzen für "zu lange Abschnitte weiter unterteilen" denselben
+  tokenbasierten Chunker mit Overlap, der direkt auf Token-IDs des
+  Embedding-Modells arbeitet (nicht auf Wörtern) – das hält die harte
+  `max_seq_length`-Grenze garantiert ein.
+- **`IndexMetadata` friert Embedding-Modell/Chunking-Konfig beim ersten
+  Dokument ein** (`ensure_bootstrapped`): alle weiteren Dokumente desselben
+  Projekts nutzen diese eingefrorenen Werte, nicht die ggf. seither in den
+  globalen Settings geänderten – verhindert gemischte Embeddings innerhalb
+  einer `index_version`. Ein Wechsel wirkt erst nach explizitem Rebuild
+  (folgt in einem späteren Schritt).
+- **`process_document(db, document_id)`** ist bereits die im Briefing
+  geforderte, eigenständig aufrufbare Pipeline-Funktion (inkl. idempotenter
+  Löschung bestehender Chunks vor Neuaufbau) – Schritt 3 ruft sie nur
+  synchron direkt nach dem Anlegen auf; ein Background-Task-Runner (Schritt 8)
+  kann sie unverändert übernehmen.
 
 ## Persistenzstruktur
 

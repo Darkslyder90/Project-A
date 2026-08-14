@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type Project } from '../api/client'
+import { DocumentsSection } from '../components/DocumentsSection'
 
 type Props = {
   projectId: number
@@ -36,9 +37,10 @@ export function ProjectHome({ projectId, onSwitch }: Props) {
 
       {error && <p className="status-error">{error}</p>}
 
+      <DocumentsSection projectId={projectId} />
+
       <p className="subtitle">
-        Weitere Funktionen (Dokumente, Chat, Personen, Aufgaben, Meetings) folgen in den
-        nächsten Schritten.
+        Weitere Funktionen (Chat, Personen, Aufgaben, Meetings) folgen in den nächsten Schritten.
       </p>
     </div>
   )

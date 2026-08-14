@@ -7,6 +7,7 @@ from app.config import get_settings
 from app.core.exceptions import NotFoundError
 from app.db.models.index_metadata import IndexMetadata
 from app.db.models.project import Project
+from app.indexing.chroma_client import get_chroma_client
 
 
 def list_projects(db: Session) -> list[Project]:
@@ -54,16 +55,26 @@ def delete_project(db: Session, project_id: int) -> None:
     settings = get_settings()
     project_uploads_dir = settings.uploads_dir / str(project_id)
 
+    # Collection-Name VOR dem Loeschen der Projekt-Zeile sichern - IndexMetadata
+    # verschwindet gleich per FK-Kaskade zusammen mit dem Project.
+    index_meta = db.get(IndexMetadata, project_id)
+    collection_name = index_meta.active_collection_name if index_meta else None
+
     # DB-Loeschung zuerst: SQLite-FK-Kaskaden (ON DELETE CASCADE) raeumen alle
     # abhaengigen Zeilen (Documents, Chunks, Tags, Personen, Tasks, Meetings,
     # Chats, IndexMetadata, ApiUsageLogs) in derselben Transaktion aus.
     db.delete(project)
     db.commit()
 
-    # Dateisystem liegt ausserhalb der DB-Transaktion (siehe Briefing: keine
-    # klassische Cross-Store-ACID-Transaktion moeglich) - danach best-effort
-    # aufraeumen. Ein erneuter Aufruf ist gefahrlos (Verzeichnis existiert dann
-    # bereits nicht mehr), daher hier keine Soft-Delete-Zwischenstufe noetig,
-    # solange nur das Upload-Verzeichnis betroffen ist (kein Chroma-Index vor
-    # Schritt 3 vorhanden).
+    # Dateisystem/Chroma liegen ausserhalb der DB-Transaktion (siehe Briefing:
+    # keine klassische Cross-Store-ACID-Transaktion moeglich) - danach
+    # best-effort aufraeumen. Ein erneuter Aufruf ist gefahrlos (Verzeichnis
+    # bzw. Collection existieren dann bereits nicht mehr).
     shutil.rmtree(project_uploads_dir, ignore_errors=True)
+
+    if collection_name:
+        client = get_chroma_client(str(settings.chroma_dir))
+        try:
+            client.delete_collection(collection_name)
+        except Exception:  # noqa: BLE001 - Collection ggf. bereits weg, kein harter Fehler
+            pass

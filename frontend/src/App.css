@@ -138,3 +138,114 @@ button.danger {
   align-items: flex-start;
   gap: 1rem;
 }
+
+/* --- Documents --- */
+
+.documents-section {
+  margin-top: 2rem;
+}
+
+.create-document-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.create-document-form .form-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.create-document-form select,
+.create-document-form input,
+.create-document-form textarea {
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text);
+  font-family: inherit;
+}
+
+.create-document-form input[type='text'] {
+  flex: 1;
+  min-width: 160px;
+}
+
+.create-document-form textarea {
+  resize: vertical;
+}
+
+.create-document-form button {
+  align-self: flex-start;
+}
+
+.document-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.document-list-item {
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.document-list-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.document-title {
+  font-weight: 600;
+}
+
+.document-meta {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-top: 0.15rem;
+}
+
+.document-error {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-error);
+}
+
+.status-badge {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status-badge--ready {
+  background-color: rgba(76, 175, 125, 0.15);
+  color: var(--color-ok);
+}
+
+.status-badge--failed {
+  background-color: rgba(229, 103, 122, 0.15);
+  color: var(--color-error);
+}
+
+.status-badge--pending,
+.status-badge--processing,
+.status-badge--indexing,
+.status-badge--review_required {
+  background-color: rgba(91, 157, 255, 0.15);
+  color: var(--color-accent);
+}
