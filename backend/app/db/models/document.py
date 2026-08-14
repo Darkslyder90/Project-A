@@ -3,7 +3,7 @@ from datetime import date, datetime
 from sqlalchemy import Date, DateTime
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, Index, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.db.base import Base
@@ -54,6 +54,17 @@ class Document(Base):
     # Soft-Delete (technische Entscheidung, siehe Architekturuebersicht): getrennt vom
     # Ingestion-Status, damit `status` ausschliesslich die Pipeline beschreibt.
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # viewonly: Pflege laeuft ueber tag_service.assign_tag/unassign_tag (explizite
+    # DocumentTag-Zeilen), diese Relationship dient nur der bequemen Auswertung
+    # beim Lesen (siehe Document.tag_ids, Uebersichtsseiten Schritt 12).
+    tags: Mapped[list["Tag"]] = relationship(  # noqa: F821
+        secondary="document_tags", viewonly=True, order_by="Tag.name"
+    )
+
+    @property
+    def tag_ids(self) -> list[int]:
+        return [t.id for t in self.tags]
 
 
 class DocumentTag(Base):

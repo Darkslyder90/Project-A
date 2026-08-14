@@ -9,7 +9,7 @@ from app.background.task_runner import DocumentTaskRunner
 from app.config import get_settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
 from app.db.models.chunk import Chunk
-from app.db.models.document import Document
+from app.db.models.document import Document, DocumentTag
 from app.db.models.enums import DocumentStatus, DocumentType
 from app.db.models.index_metadata import IndexMetadata
 from app.db.models.meeting import Meeting
@@ -278,6 +278,7 @@ def delete_document(db: Session, project_id: int, document_id: int) -> None:
     db.commit()
 
     db.query(TaskDocument).filter(TaskDocument.document_id == document_id).delete()
+    db.query(DocumentTag).filter(DocumentTag.document_id == document_id).delete()
     db.query(Chunk).filter(Chunk.document_id == document_id).delete()
     db.commit()
 

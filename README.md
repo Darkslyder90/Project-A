@@ -55,13 +55,19 @@ Aktuell abgeschlossen:
     Protokoll-Dokument tragen – ist eines gesetzt, kann es nicht separat
     gelöscht werden, nur über das Löschen des gesamten Meetings (das dann
     sein Dokument mitentfernt) – dafür jetzt auch generische
-    Dokument-Löschung (Soft-Delete + Chroma-/Chunk-/Datei-Cleanup). Backend
-    für Tasks ist vollständig fertig/getestet, der Aufgaben-Abschnitt in der
-    Oberfläche ist aber auf Nutzerwunsch aktuell auskommentiert (siehe
-    Technische Entscheidungen)
+    Dokument-Löschung (Soft-Delete + Chroma-/Chunk-/Datei-Cleanup)
+12. ✅ Übersichtsseiten: neuer Reiter-Umschalter ("Übersicht" / "Chat" /
+    "Verwalten") statt einer langen Seite; "Übersicht" zeigt kompakte
+    Tabellen für Dokumente (inkl. Tags, Status-Badge, Bild-Vorschau/Volltext
+    per Klick aufklappbar), Personen (inkl. zugehöriger Aufgaben), Aufgaben
+    (inkl. zugewiesener Person/verknüpfter Dokumente) und Meetings (inkl.
+    Teilnehmer/Protokoll-Auszug); "Verwalten" enthält die bisherigen
+    Formulare/Listen (inkl. der jetzt wieder eingebundenen Aufgaben-Section);
+    "Chat" bündelt Chat + Retrieval-Test. Dabei nachgezogen: minimale
+    Tag-Verwaltung (bisher nur Datenmodell, nie an eine UI angebunden)
 
-Alle weiteren Schritte (Übersichtsseiten, Settings, Export/Import,
-Backup/Update, Docker/Prod-Deployment) folgen schrittweise.
+Alle weiteren Schritte (Settings, Export/Import, Backup/Update,
+Docker/Prod-Deployment) folgen schrittweise.
 
 ## Lokale Entwicklung
 
@@ -359,10 +365,37 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   jetzt zusätzlich, ein Protokoll-Dokument nachträglich zuzuweisen; die
   Löschung eines Meetings ohne Dokument überspringt einfach den
   `document_service.delete_document()`-Aufruf.
-- **Aufgaben-Abschnitt auf der Projektseite auf Nutzerwunsch erstmal wieder
-  entfernt** (`ProjectHome.tsx`, `<TasksSection>` auskommentiert statt
-  gelöscht) – Backend/API/Tests für Tasks bleiben vollständig bestehen,
-  falls die Funktion später an anderer Stelle/in anderer Form zurückkommt.
+- **Aufgaben-Abschnitt auf der Projektseite auf Nutzerwunsch kurzzeitig
+  entfernt, in Schritt 12 mit dem neuen Verwalten-Tab wieder eingebunden**
+  (siehe Klärung zu Beginn von Schritt 12 – der Nutzer wollte Tasks nicht
+  lose auf der langen Seite, aber ausdrücklich in der neuen
+  Übersichtsseite).
+- **Übersichtsseiten als Reiter-Layout statt einer noch längeren Seite**
+  (`ProjectHome.tsx` bekommt einen simplen Tab-State `uebersicht|chat|
+  verwalten`, keine Router-Bibliothek eingeführt – für drei feste Reiter
+  innerhalb eines Projekts reicht lokaler State, eine URL-Route pro Tab
+  bringt für den Single-User-MVP keinen Mehrwert): Klärung mit dem Nutzer
+  ergab "eigener Tab/Reiter" gegenüber "alles weiter untereinander".
+- **Tags nachgezogen** (`Tag`/`DocumentTag` existierten seit Schritt 1 im
+  Datenmodell, waren aber nie an eine UI oder einen Endpunkt angebunden) –
+  minimal gehalten: `get_or_create_tag()` beim Zuweisen (kein separates
+  Tag-Verwaltungsformular), Tags werden nur über ein Dokument herum
+  vergeben/entfernt (`POST/DELETE .../documents/{id}/tags`), Löschen eines
+  Tags selbst über `DELETE .../tags/{id}` entfernt ihn aus allen Dokumenten
+  (FK-Kaskade auf `document_tags`). `Document.tag_ids` als viewonly-
+  Relationship-Property, analog zu `Task.dokument_ids`/`Meeting.teilnehmer_ids`.
+- **`delete_document()` räumt jetzt zusätzlich `DocumentTag`-Zeilen auf**
+  (Nachtrag zu Schritt 11/12, analog zur bereits vorhandenen
+  `TaskDocument`-Bereinigung) – beim Soft-Delete greift die FK-Kaskade
+  nicht, da die Document-Zeile selbst nicht gelöscht wird.
+- **"Klick öffnet Volltext" als aufklappbare Tabellenzeile** statt eines
+  Modals/einer Detailseite – reicht für die "einfache tabellarische
+  Übersicht" laut Briefing, ohne zusätzliches Routing/State-Management für
+  eine Dokumentendetailseite einzuführen.
+- **`.app-shell` max-width von 640px auf 900px erhöht**, damit die
+  mehrspaltigen Übersichtstabellen nicht zu gedrängt wirken; einzelne
+  Tabellen bekommen zusätzlich `overflow-x: auto`, falls der Inhalt trotzdem
+  nicht passt (schmale Fenster/viele Tags).
 
 ## Persistenzstruktur
 

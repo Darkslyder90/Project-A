@@ -44,3 +44,4 @@ class DocumentRead(BaseModel):
     dateiname: str | None
     erstellt_am: datetime
     aktualisiert_am: datetime
+    tag_ids: list[int]

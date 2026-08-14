@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_task_runner
 from app.api.schemas.document import DocumentCreate, DocumentRead, DocumentReviewSubmit
+from app.api.schemas.tag import TagCreate
 from app.background.task_runner import DocumentTaskRunner
 from app.db.models.enums import DocumentType
-from app.services import document_service
+from app.services import document_service, tag_service
 
 router = APIRouter(prefix="/api/projects/{project_id}/documents", tags=["documents"])
 
@@ -100,3 +101,17 @@ def confirm_document_review(
     return document_service.confirm_image_review(
         db, project_id, document_id, inhalt=payload.inhalt, task_runner=task_runner
     )
+
+
+@router.post("/{document_id}/tags", response_model=DocumentRead)
+def assign_tag(
+    project_id: int, document_id: int, payload: TagCreate, db: Session = Depends(get_db)
+) -> DocumentRead:
+    return tag_service.assign_tag(db, project_id, document_id, payload.name)
+
+
+@router.delete("/{document_id}/tags/{tag_id}", response_model=DocumentRead)
+def unassign_tag(
+    project_id: int, document_id: int, tag_id: int, db: Session = Depends(get_db)
+) -> DocumentRead:
+    return tag_service.unassign_tag(db, project_id, document_id, tag_id)

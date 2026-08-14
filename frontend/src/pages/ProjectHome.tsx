@@ -3,21 +3,28 @@ import { api, type Project } from '../api/client'
 import { ChatSection } from '../components/ChatSection'
 import { DocumentsSection } from '../components/DocumentsSection'
 import { MeetingsSection } from '../components/MeetingsSection'
+import { OverviewSection } from '../components/OverviewSection'
 import { PeopleSection } from '../components/PeopleSection'
 import { RetrievalTestSection } from '../components/RetrievalTestSection'
-// Aufgaben-Section auf Nutzerwunsch erstmal wieder raus (siehe TasksSection.tsx,
-// Backend/API bleiben unveraendert bestehen) - moeglicherweise spaeter in
-// anderer Form/Platzierung wieder aktiviert.
-// import { TasksSection } from '../components/TasksSection'
+import { TasksSection } from '../components/TasksSection'
 
 type Props = {
   projectId: number
   onSwitch: () => void
 }
 
+type Tab = 'uebersicht' | 'chat' | 'verwalten'
+
+const TAB_LABELS: Record<Tab, string> = {
+  uebersicht: 'Übersicht',
+  chat: 'Chat',
+  verwalten: 'Verwalten',
+}
+
 export function ProjectHome({ projectId, onSwitch }: Props) {
   const [project, setProject] = useState<Project | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('uebersicht')
 
   useEffect(() => {
     api
@@ -33,6 +40,10 @@ export function ProjectHome({ projectId, onSwitch }: Props) {
       .catch((err: Error) => setError(err.message))
   }, [projectId])
 
+  useEffect(() => {
+    setTab('uebersicht')
+  }, [projectId])
+
   return (
     <div className="project-home">
       <header className="project-home-header">
@@ -45,17 +56,31 @@ export function ProjectHome({ projectId, onSwitch }: Props) {
 
       {error && <p className="status-error">{error}</p>}
 
-      <DocumentsSection projectId={projectId} />
+      <nav className="project-tabs">
+        {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
+          <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
+            {TAB_LABELS[t]}
+          </button>
+        ))}
+      </nav>
 
-      <PeopleSection projectId={projectId} />
+      {tab === 'uebersicht' && <OverviewSection projectId={projectId} />}
 
-      {/* <TasksSection projectId={projectId} /> */}
+      {tab === 'chat' && (
+        <>
+          <ChatSection projectId={projectId} />
+          <RetrievalTestSection projectId={projectId} />
+        </>
+      )}
 
-      <MeetingsSection projectId={projectId} />
-
-      <ChatSection projectId={projectId} />
-
-      <RetrievalTestSection projectId={projectId} />
+      {tab === 'verwalten' && (
+        <>
+          <DocumentsSection projectId={projectId} />
+          <PeopleSection projectId={projectId} />
+          <TasksSection projectId={projectId} />
+          <MeetingsSection projectId={projectId} />
+        </>
+      )}
     </div>
   )
 }

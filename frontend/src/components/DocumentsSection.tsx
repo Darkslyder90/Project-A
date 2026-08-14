@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ApiError, api, type Document, type DocumentType } from '../api/client'
+import { ApiError, api, type Document, type DocumentType, type Tag } from '../api/client'
 
 type Props = {
   projectId: number
@@ -69,6 +69,9 @@ export function DocumentsSection({ projectId }: Props) {
   const [reviewDrafts, setReviewDrafts] = useState<Record<number, string>>({})
   const [submittingReviewId, setSubmittingReviewId] = useState<number | null>(null)
 
+  const [tags, setTags] = useState<Tag[]>([])
+  const [newTagDrafts, setNewTagDrafts] = useState<Record<number, string>>({})
+
   const loadDocuments = () => {
     api
       .listDocuments(projectId)
@@ -76,11 +79,42 @@ export function DocumentsSection({ projectId }: Props) {
       .catch((err: Error) => setError(err.message))
   }
 
+  const loadTags = () => {
+    api.listTags(projectId).then(setTags).catch(() => {})
+  }
+
   useEffect(() => {
     setDocuments(null)
     loadDocuments()
+    loadTags()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
+
+  const tagName = (id: number) => tags.find((t) => t.id === id)?.name ?? `#${id}`
+
+  const handleAddTag = async (documentId: number) => {
+    const name = (newTagDrafts[documentId] ?? '').trim()
+    if (!name) return
+    setError(null)
+    try {
+      const updated = await api.assignTag(projectId, documentId, name)
+      setDocuments((prev) => prev?.map((d) => (d.id === documentId ? updated : d)) ?? null)
+      setNewTagDrafts((prev) => ({ ...prev, [documentId]: '' }))
+      loadTags()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handleRemoveTag = async (documentId: number, tagId: number) => {
+    setError(null)
+    try {
+      const updated = await api.unassignTag(projectId, documentId, tagId)
+      setDocuments((prev) => prev?.map((d) => (d.id === documentId ? updated : d)) ?? null)
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
 
   // Seit Schritt 8 laeuft die Verarbeitung asynchron im Hintergrund - solange
   // mindestens ein Dokument noch nicht in einem Endzustand ist, wird die Liste
@@ -393,6 +427,29 @@ export function DocumentsSection({ projectId }: Props) {
                   </a>
                 </>
               )}
+            </div>
+            <div className="tag-list">
+              {doc.tag_ids.map((tagId) => (
+                <span key={tagId} className="tag-chip">
+                  {tagName(tagId)}
+                  <button type="button" onClick={() => handleRemoveTag(doc.id, tagId)}>
+                    ×
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                className="tag-input"
+                placeholder="+ Tag"
+                value={newTagDrafts[doc.id] ?? ''}
+                onChange={(e) => setNewTagDrafts((prev) => ({ ...prev, [doc.id]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleAddTag(doc.id)
+                  }
+                }}
+              />
             </div>
             <div className="entity-actions">
               <button

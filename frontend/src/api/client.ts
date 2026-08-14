@@ -35,6 +35,13 @@ export type Document = {
   dateiname: string | null
   erstellt_am: string
   aktualisiert_am: string
+  tag_ids: number[]
+}
+
+export type Tag = {
+  id: number
+  project_id: number
+  name: string
 }
 
 export type DocumentCreateInput = {
@@ -247,6 +254,19 @@ export const api = {
     `/api/projects/${projectId}/documents/${documentId}/file`,
   deleteDocument: (projectId: number, documentId: number) =>
     request<void>(`/api/projects/${projectId}/documents/${documentId}`, { method: 'DELETE' }),
+  assignTag: (projectId: number, documentId: number, name: string) =>
+    request<Document>(`/api/projects/${projectId}/documents/${documentId}/tags`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  unassignTag: (projectId: number, documentId: number, tagId: number) =>
+    request<Document>(`/api/projects/${projectId}/documents/${documentId}/tags/${tagId}`, {
+      method: 'DELETE',
+    }),
+
+  listTags: (projectId: number) => request<Tag[]>(`/api/projects/${projectId}/tags`),
+  deleteTag: (projectId: number, tagId: number) =>
+    request<void>(`/api/projects/${projectId}/tags/${tagId}`, { method: 'DELETE' }),
 
   testRetrieval: (projectId: number, query: string, topK = 5) =>
     request<RetrievalHit[]>(`/api/projects/${projectId}/retrieval-test`, {

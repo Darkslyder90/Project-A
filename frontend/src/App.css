@@ -1,5 +1,7 @@
 .app-shell {
-  max-width: 640px;
+  /* War 640px - fuer die tabellarischen Uebersichtsseiten (Schritt 12) mit
+     mehreren Spalten (Titel/Typ/Datum/Status/Tags/Kurztext) zu schmal. */
+  max-width: 900px;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
 }
@@ -279,6 +281,45 @@ button.danger {
   white-space: nowrap;
 }
 
+.tag-list {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background-color: rgba(91, 157, 255, 0.15);
+  color: var(--color-accent);
+}
+
+.tag-chip button {
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.tag-input {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px dashed var(--color-border);
+  background: none;
+  color: var(--color-text);
+  width: 6rem;
+}
+
 .status-badge--ready {
   background-color: rgba(76, 175, 125, 0.15);
   color: var(--color-ok);
@@ -532,6 +573,93 @@ button.danger {
   font-size: 0.85rem;
   color: var(--color-text-muted);
   margin-top: 0.15rem;
+}
+
+/* --- Übersicht (Schritt 12) --- */
+
+.overview-section h3 {
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.overview-section h3:first-of-type {
+  margin-top: 1rem;
+}
+
+.overview-table-wrap {
+  overflow-x: auto;
+}
+
+.overview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.overview-table th,
+.overview-table td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.overview-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.overview-row-clickable {
+  cursor: pointer;
+}
+
+.overview-row-clickable:hover {
+  background-color: var(--color-bg-elevated);
+}
+
+.overview-expanded-row td {
+  background-color: var(--color-bg-elevated);
+}
+
+.overview-fulltext {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.overview-image-preview {
+  max-width: 100%;
+  max-height: 300px;
+  display: block;
+  margin-bottom: 0.5rem;
+  border-radius: 6px;
+}
+
+/* --- Tabs --- */
+
+.project-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 1rem 0 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.project-tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--color-text-muted);
+  padding: 0.6rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-tabs button.active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
 }
 
 .entity-notes {

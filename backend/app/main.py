@@ -12,6 +12,7 @@ from app.api.routes.meetings import router as meetings_router
 from app.api.routes.people import router as people_router
 from app.api.routes.projects import router as projects_router
 from app.api.routes.retrieval import router as retrieval_router
+from app.api.routes.tags import router as tags_router
 from app.api.routes.tasks import router as tasks_router
 from app.background.recovery import recover_stuck_documents
 from app.background.task_runner import DocumentTaskRunner
@@ -78,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(people_router)
     app.include_router(tasks_router)
     app.include_router(meetings_router)
+    app.include_router(tags_router)
 
     return app
 
