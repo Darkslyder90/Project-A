@@ -1,9 +1,15 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.api.schemas.settings import AppSettingsRead, AppSettingsUpdate, UsageSummaryRead
-from app.services import settings_service
+from app.api.schemas.settings import (
+    AppSettingsRead,
+    AppSettingsUpdate,
+    ModelPricingCreate,
+    ModelPricingRead,
+    UsageSummaryRead,
+)
+from app.services import pricing_service, settings_service
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -23,6 +29,7 @@ def _to_read(db: Session) -> AppSettingsRead:
         chunk_ziel_tokens=app_settings.chunk_ziel_tokens,
         chunk_overlap_tokens=app_settings.chunk_overlap_tokens,
         fusion_verfahren=app_settings.fusion_verfahren,
+        eur_usd_wechselkurs=app_settings.eur_usd_wechselkurs,
     )
 
 
@@ -40,3 +47,26 @@ def update_settings_endpoint(payload: AppSettingsUpdate, db: Session = Depends(g
 @router.get("/usage", response_model=UsageSummaryRead)
 def get_usage_endpoint(db: Session = Depends(get_db)) -> UsageSummaryRead:
     return settings_service.get_usage_summary(db)
+
+
+@router.get("/pricing", response_model=list[ModelPricingRead])
+def list_pricing_endpoint(db: Session = Depends(get_db)) -> list[ModelPricingRead]:
+    return pricing_service.list_pricing(db)
+
+
+@router.post("/pricing", response_model=ModelPricingRead, status_code=status.HTTP_201_CREATED)
+def create_pricing_endpoint(payload: ModelPricingCreate, db: Session = Depends(get_db)) -> ModelPricingRead:
+    return pricing_service.create_pricing(
+        db,
+        modell_name=payload.modell_name,
+        gueltig_ab=payload.gueltig_ab,
+        input_preis_pro_million_usd=payload.input_preis_pro_million_usd,
+        output_preis_pro_million_usd=payload.output_preis_pro_million_usd,
+        cache_write_preis_pro_million_usd=payload.cache_write_preis_pro_million_usd,
+        cache_read_preis_pro_million_usd=payload.cache_read_preis_pro_million_usd,
+    )
+
+
+@router.delete("/pricing/{pricing_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_pricing_endpoint(pricing_id: int, db: Session = Depends(get_db)) -> None:
+    pricing_service.delete_pricing(db, pricing_id)

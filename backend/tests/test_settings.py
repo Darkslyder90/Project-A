@@ -158,3 +158,77 @@ def test_usage_summary_counts_todays_chat_call(client, monkeypatch):
     assert after["heute"]["tokens"] > before["heute"]["tokens"]
     assert after["woche"]["anfragen"] >= after["heute"]["anfragen"]
     assert after["monat"]["anfragen"] >= after["woche"]["anfragen"]
+    # Kein Preis fuer "claude-opus-5" hinterlegt (Testdatenbank startet ohne
+    # Seed-Daten, siehe Migration vs. Base.metadata.create_all in conftest.py).
+    assert after["heute"]["vollstaendig"] is False
+    assert after["heute"]["kosten_eur"] == 0.0
+
+
+def test_get_settings_includes_default_wechselkurs(client):
+    body = client.get("/api/settings").json()
+    assert body["eur_usd_wechselkurs"] == 0.92
+
+
+def test_patch_settings_updates_wechselkurs(client):
+    response = client.patch("/api/settings", json={"eur_usd_wechselkurs": 1.1})
+    assert response.status_code == 200
+    assert response.json()["eur_usd_wechselkurs"] == 1.1
+
+
+def test_patch_settings_rejects_non_positive_wechselkurs(client):
+    response = client.patch("/api/settings", json={"eur_usd_wechselkurs": 0})
+    assert response.status_code == 422
+
+
+def test_create_list_delete_pricing(client):
+    assert client.get("/api/settings/pricing").json() == []
+
+    created = client.post(
+        "/api/settings/pricing",
+        json={
+            "modell_name": "claude-opus-5",
+            "gueltig_ab": "2026-01-01",
+            "input_preis_pro_million_usd": 5.0,
+            "output_preis_pro_million_usd": 25.0,
+        },
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["modell_name"] == "claude-opus-5"
+    assert body["cache_write_preis_pro_million_usd"] is None
+
+    listed = client.get("/api/settings/pricing").json()
+    assert len(listed) == 1
+
+    deleted = client.delete(f"/api/settings/pricing/{body['id']}")
+    assert deleted.status_code == 204
+    assert client.get("/api/settings/pricing").json() == []
+
+
+def test_delete_unknown_pricing_returns_404(client):
+    assert client.delete("/api/settings/pricing/999999").status_code == 404
+
+
+def test_usage_summary_reflects_configured_pricing_and_wechselkurs(client, monkeypatch):
+    _patch_claude(monkeypatch)
+    client.post(
+        "/api/settings/pricing",
+        json={
+            "modell_name": "claude-opus-5",
+            "gueltig_ab": "2020-01-01",
+            "input_preis_pro_million_usd": 5.0,
+            "output_preis_pro_million_usd": 25.0,
+        },
+    )
+    client.patch("/api/settings", json={"eur_usd_wechselkurs": 1.0})
+
+    project_id = client.post("/api/projects", json={"name": "Kosten-Test"}).json()["id"]
+    conversation_id = client.post(f"/api/projects/{project_id}/chat/conversations").json()["id"]
+    client.post(
+        f"/api/projects/{project_id}/chat/conversations/{conversation_id}/messages",
+        json={"query": "Hallo?"},
+    )
+
+    usage = client.get("/api/settings/usage").json()
+    assert usage["heute"]["vollstaendig"] is True
+    assert usage["heute"]["kosten_eur"] > 0

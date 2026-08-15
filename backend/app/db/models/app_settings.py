@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, String, Text
+from sqlalchemy import Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -32,3 +32,9 @@ class AppSettings(Base):
     chunk_ziel_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=350)
     chunk_overlap_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     fusion_verfahren: Mapped[str] = mapped_column(String(50), nullable=False, default="rrf")
+
+    # Manuell gepflegter Umrechnungskurs (wie viele Euro entsprechen 1 US-Dollar,
+    # siehe pricing_service.py) - kein automatischer Kursabruf (siehe Briefing-
+    # Geist: einfache, nachvollziehbare Loesungen statt zusaetzlicher externer
+    # Abhaengigkeit fuer eine reine Schaetzanzeige).
+    eur_usd_wechselkurs: Mapped[float] = mapped_column(Float, nullable=False, default=0.92)

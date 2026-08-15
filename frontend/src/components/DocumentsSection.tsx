@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, api, type Document, type DocumentType, type Tag } from '../api/client'
+import { useSpeechDictation } from '../hooks/useSpeechDictation'
 
 type Props = {
   projectId: number
@@ -50,6 +51,12 @@ export function DocumentsSection({ projectId }: Props) {
   const [creating, setCreating] = useState(false)
   const [reprocessingId, setReprocessingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  // Spracheingabe fuer den Inhalt (siehe hooks/useSpeechDictation.ts) - haengt
+  // erkannten Text an, statt ihn zu ersetzen (mehrere Diktier-Durchgaenge moeglich).
+  const dictation = useSpeechDictation((text) =>
+    setInhalt((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text)),
+  )
 
   const [mode, setMode] = useState<'manuell' | 'datei' | 'bild'>('manuell')
   const [uploadTyp, setUploadTyp] = useState<DocumentType>('notiz')
@@ -323,6 +330,23 @@ export function DocumentsSection({ projectId }: Props) {
             rows={5}
             required
           />
+          {dictation.supported && (
+            <div className="dictation-row">
+              <button
+                type="button"
+                className={dictation.dictating ? 'active' : 'link-button'}
+                onClick={dictation.toggle}
+              >
+                {dictation.dictating ? '⏹ Aufnahme beenden' : '🎤 Diktieren'}
+              </button>
+              {dictation.dictating && (
+                <span className="subtitle">
+                  Läuft … Spracherkennung des Browsers, Audio verlässt dafür deinen Rechner (nicht
+                  Project-A selbst).
+                </span>
+              )}
+            </div>
+          )}
           <button type="submit" disabled={creating}>
             {creating ? 'Wird angelegt …' : 'Dokument anlegen'}
           </button>

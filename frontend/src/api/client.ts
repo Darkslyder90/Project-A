@@ -199,6 +199,7 @@ export type AppSettings = {
   chunk_ziel_tokens: number
   chunk_overlap_tokens: number
   fusion_verfahren: string
+  eur_usd_wechselkurs: number
 }
 
 export type AppSettingsUpdateInput = {
@@ -210,17 +211,39 @@ export type AppSettingsUpdateInput = {
   final_k?: number
   chunk_ziel_tokens?: number
   chunk_overlap_tokens?: number
+  eur_usd_wechselkurs?: number
 }
 
 export type UsagePeriodSummary = {
   anfragen: number
   tokens: number
+  kosten_eur: number
+  vollstaendig: boolean
 }
 
 export type UsageSummary = {
   heute: UsagePeriodSummary
   woche: UsagePeriodSummary
   monat: UsagePeriodSummary
+}
+
+export type ModelPricing = {
+  id: number
+  modell_name: string
+  gueltig_ab: string
+  input_preis_pro_million_usd: number
+  output_preis_pro_million_usd: number
+  cache_write_preis_pro_million_usd: number | null
+  cache_read_preis_pro_million_usd: number | null
+}
+
+export type ModelPricingCreateInput = {
+  modell_name: string
+  gueltig_ab: string
+  input_preis_pro_million_usd: number
+  output_preis_pro_million_usd: number
+  cache_write_preis_pro_million_usd?: number | null
+  cache_read_preis_pro_million_usd?: number | null
 }
 
 export class ApiError extends Error {
@@ -271,6 +294,8 @@ export const api = {
   },
 
   listDocuments: (projectId: number) => request<Document[]>(`/api/projects/${projectId}/documents`),
+  getDocument: (projectId: number, documentId: number) =>
+    request<Document>(`/api/projects/${projectId}/documents/${documentId}`),
   createDocument: (projectId: number, input: DocumentCreateInput) =>
     request<Document>(`/api/projects/${projectId}/documents`, {
       method: 'POST',
@@ -400,4 +425,9 @@ export const api = {
   updateSettings: (input: AppSettingsUpdateInput) =>
     request<AppSettings>('/api/settings', { method: 'PATCH', body: JSON.stringify(input) }),
   getUsageSummary: () => request<UsageSummary>('/api/settings/usage'),
+
+  listPricing: () => request<ModelPricing[]>('/api/settings/pricing'),
+  createPricing: (input: ModelPricingCreateInput) =>
+    request<ModelPricing>('/api/settings/pricing', { method: 'POST', body: JSON.stringify(input) }),
+  deletePricing: (id: number) => request<void>(`/api/settings/pricing/${id}`, { method: 'DELETE' }),
 }

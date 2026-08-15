@@ -95,6 +95,41 @@ Aktuell abgeschlossen:
 
 Damit sind alle 15 im Briefing beschriebenen vertikalen Schritte umgesetzt.
 
+### Nachträge nach Abschluss der 15 Schritte
+
+Zusätzliche, vom Nutzer nachträglich gewünschte Funktionen (nicht Teil der
+ursprünglichen 15 Schritte):
+
+- **Quellen im Chat sind jetzt direkt aufklappbar**: Klick auf eine
+  Quellenangabe `[S1]` lädt und zeigt das zitierte Dokument inline (Volltext,
+  bei Bildern Vorschau, Download-Link bei hochgeladenen Dateien) – ohne
+  Tab-Wechsel zur Übersicht.
+- **Spracheingabe beim manuellen Anlegen von Dokumenten**: Mikrofon-Button
+  über dem Inhaltsfeld nutzt die Web Speech API des Browsers (Chrome/Edge;
+  Firefox/Safari unterstützen das nicht zuverlässig, Button wird dort
+  automatisch ausgeblendet). Wichtig für die Datenschutz-Transparenz des
+  Projekts: die Spracherkennung läuft dabei **nicht** über Project-A's
+  eigenen Server, sondern über den Spracherkennungsdienst des
+  Browser-Anbieters (z. B. Google bei Chrome) – im UI als Hinweis während
+  der Aufnahme sichtbar.
+- **API-Kostenschätzung**: neue `ModelPricing`-Tabelle (Preise pro Modell,
+  zeitlich versioniert über `gueltig_ab`) plus manuell gepflegter
+  EUR/USD-Wechselkurs (`AppSettings.eur_usd_wechselkurs`, kein automatischer
+  Kursabruf). Die API-Nutzungsübersicht in den Einstellungen zeigt damit
+  zusätzlich zu Anfragen/Tokens eine grobe Kostenschätzung
+  ("ca. 1,42 €") pro Zeitraum. Kosten werden dabei **immer live** aus
+  Tokens + dem zum jeweiligen Zeitpunkt gültigen Preis berechnet, nie
+  dauerhaft als Euro-Betrag gespeichert – historische Auswertungen bleiben
+  dadurch korrekt, auch wenn sich Preise später ändern. Fehlt für einen
+  genutzten Modellnamen ein Preis, wird das per `vollstaendig: false` und
+  einem "unvollständig"-Hinweis in der UI transparent gemacht, statt eine
+  falsch-genaue Zahl vorzutäuschen. Startwerte für `claude-opus-5`,
+  `claude-sonnet-5` und `claude-haiku-4-5-20251001` sind mit den zum
+  Einspielzeitpunkt der Migration (14.08.2026) aktuellen Preisen vorbefüllt.
+  **Hinweis:** der vorbefüllte Wechselkurs (0,92) ist ein grober Platzhalter
+  ohne Anbindung an eine Live-Kursquelle – bitte in den Einstellungen mit
+  dem tatsächlich aktuellen Kurs überschreiben.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Python 3.11+ (getestet mit 3.14), Node.js 20+ (getestet mit 24).
@@ -632,6 +667,28 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
   bereits vorhandenen `/reprocess`-Endpunkt) – u. a. relevant, falls nach
   einem Restore nur die SQLite-DB, aber nicht der Chroma-Ordner
   zurückgesichert wurde (siehe Backup & Restore oben).
+- **Chat-Quellen-Vorschau lädt das Dokument erst bei Klick, nicht vorab**
+  (`ChatSection.tsx`, `documentCache` pro Dokument-ID) – bei Konversationen
+  mit vielen Quellen würde ein Vorab-Laden aller referenzierten Dokumente
+  unnötige Requests erzeugen, obwohl die meisten Quellen nie aufgeklappt
+  werden.
+- **Spracheingabe als eigener Hook (`hooks/useSpeechDictation.ts`)** statt
+  einer neuen Abhängigkeit für serverseitige Transkription – die Web Speech
+  API ist bereits im Browser vorhanden (kein neues Package, keine neuen
+  Kosten/Latenz durch einen zusätzlichen Dienst), erkannter Text wird an den
+  bestehenden Inhalt angehängt statt ihn zu ersetzen (mehrere Diktier-
+  Durchgänge möglich). Feature-Detection blendet den Button aus, wenn der
+  Browser die API nicht unterstützt, statt einen kaputten Button zu zeigen.
+- **`ModelPricing` ohne Projektbezug** (analog zum Claude-API-Key/-Modell,
+  siehe Briefing: globale statt projektbezogene Einstellung) – Preise gelten
+  instanzweit für alle Projekte gemeinsam.
+- **Kostenberechnung holt volle `ApiUsageLog`-Zeilen statt einer SQL-Aggregation**
+  (`settings_service.get_usage_summary`) – jede Zeile braucht ihr eigenes,
+  zeitpunktabhängiges Preis-Matching (`pricing_service._find_applicable_price`),
+  das sich nicht sauber in eine einzelne SQL-Aggregatfunktion pressen lässt;
+  bei einer Single-User-Instanz ist das Datenvolumen dafür unproblematisch
+  klein. heute/woche sind Teilmengen der Monats-Abfrage, daher genügt ein
+  Query für alle drei Zeiträume.
 
 ## Persistenzstruktur
 

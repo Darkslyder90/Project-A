@@ -1,6 +1,5 @@
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.schemas.settings import AppSettingsUpdate, UsagePeriodSummary, UsageSummaryRead
@@ -9,6 +8,7 @@ from app.core.exceptions import ValidationAppError
 from app.db.models.api_usage_log import ApiUsageLog
 from app.db.models.app_settings import AppSettings
 from app.security.crypto import EncryptionUnavailableError, decrypt, encrypt
+from app.services.pricing_service import calculate_cost_eur
 
 _SINGLETON_ID = 1
 
@@ -107,27 +107,40 @@ def update_app_settings(db: Session, update: AppSettingsUpdate) -> AppSettings:
 
 def get_usage_summary(db: Session) -> UsageSummaryRead:
     """Aggregiert ApiUsageLog fuer heute/diese Woche/diesen Monat (siehe
-    Briefing: nur Kennzahlen, z. B. "Heute: 47 API-Aufrufe / 183k Tokens" -
-    keine Kostenanzeige ohne gepflegte Preisparameter).
+    Briefing: Kennzahlen wie "Heute: 47 API-Aufrufe / 183k Tokens", ergaenzt
+    um eine geschaetzte Euro-Kostenanzeige - siehe pricing_service, Kosten
+    werden dabei immer live aus Tokens + zum jeweiligen Zeitpunkt gueltigem
+    Preis berechnet, nie dauerhaft gespeichert).
     """
     now = datetime.now(UTC).replace(tzinfo=None)  # erstellt_am ist naiv (UTC), siehe ApiUsageLog
     heute_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     woche_start = heute_start - timedelta(days=now.weekday())
     monat_start = heute_start.replace(day=1)
 
-    def _summary(since: datetime) -> UsagePeriodSummary:
-        row = (
-            db.query(
-                func.count(ApiUsageLog.id),
-                func.coalesce(func.sum(ApiUsageLog.input_tokens + ApiUsageLog.output_tokens), 0),
-            )
-            .filter(ApiUsageLog.erstellt_am >= since)
-            .one()
+    wechselkurs = get_app_settings(db).eur_usd_wechselkurs
+
+    # heute/woche sind Teilmengen von monat (monat_start <= woche_start <= heute_start) -
+    # ein Query fuer den groessten Zeitraum genuegt, kein Mehrfach-Abfragen.
+    monat_logs = (
+        db.query(ApiUsageLog)
+        .filter(ApiUsageLog.erstellt_am >= monat_start)
+        .order_by(ApiUsageLog.erstellt_am)
+        .all()
+    )
+    heute_logs = [log for log in monat_logs if log.erstellt_am >= heute_start]
+    woche_logs = [log for log in monat_logs if log.erstellt_am >= woche_start]
+
+    def _summary(logs: list[ApiUsageLog]) -> UsagePeriodSummary:
+        kosten_eur, vollstaendig = calculate_cost_eur(db, logs, wechselkurs)
+        return UsagePeriodSummary(
+            anfragen=len(logs),
+            tokens=sum(log.input_tokens + log.output_tokens for log in logs),
+            kosten_eur=kosten_eur,
+            vollstaendig=vollstaendig,
         )
-        return UsagePeriodSummary(anfragen=row[0], tokens=int(row[1]))
 
     return UsageSummaryRead(
-        heute=_summary(heute_start),
-        woche=_summary(woche_start),
-        monat=_summary(monat_start),
+        heute=_summary(heute_logs),
+        woche=_summary(woche_logs),
+        monat=_summary(monat_logs),
     )

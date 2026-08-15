@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type ChatConversation, type ChatMessage } from '../api/client'
+import { api, type ChatConversation, type ChatMessage, type Document } from '../api/client'
 
 type Props = {
   projectId: number
@@ -19,6 +19,14 @@ export function ChatSection({ projectId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [renaming, setRenaming] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
+
+  // Aufgeklappte Quelle im Chat (siehe handleToggleSource) - Key kombiniert
+  // Nachricht + Source-ID, damit sich gleiche Source-IDs verschiedener
+  // Nachrichten nicht gegenseitig auf-/zuklappen.
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  const [documentCache, setDocumentCache] = useState<Record<number, Document>>({})
+  const [loadingDocumentId, setLoadingDocumentId] = useState<number | null>(null)
+  const [sourceError, setSourceError] = useState<string | null>(null)
 
   const loadConversations = (selectId?: number) => {
     api
@@ -117,6 +125,28 @@ export function ChatSection({ projectId }: Props) {
     }
   }
 
+  const handleToggleSource = async (messageId: number, sourceId: string, documentId: number) => {
+    const key = `${messageId}-${sourceId}`
+    if (expandedKey === key) {
+      setExpandedKey(null)
+      return
+    }
+    setExpandedKey(key)
+    if (!documentCache[documentId]) {
+      setSourceError(null)
+      setLoadingDocumentId(documentId)
+      try {
+        const document = await api.getDocument(projectId, documentId)
+        setDocumentCache((prev) => ({ ...prev, [documentId]: document }))
+      } catch (err) {
+        setSourceError((err as Error).message)
+        setExpandedKey(null)
+      } finally {
+        setLoadingDocumentId(null)
+      }
+    }
+  }
+
   const startRename = () => {
     const current = conversations?.find((c) => c.id === activeId)
     setTitleDraft(current?.titel ?? '')
@@ -192,20 +222,59 @@ export function ChatSection({ projectId }: Props) {
               <p>{m.text}</p>
               {m.quellen && m.quellen.length > 0 && (
                 <ul className="chat-sources">
-                  {m.quellen.map((q) => (
-                    <li key={q.source_id}>
-                      <span className="chat-source-id">[{q.source_id}]</span>{' '}
-                      {q.geloescht ? (
-                        <span className="chat-warning">Quelle wurde inzwischen gelöscht</span>
-                      ) : (
-                        <>
-                          {q.document_titel}
-                          {q.dokumentdatum && ` · ${q.dokumentdatum}`}
-                          {q.abschnitt && ` · ${q.abschnitt}`}
-                        </>
-                      )}
-                    </li>
-                  ))}
+                  {m.quellen.map((q) => {
+                    const key = `${m.id}-${q.source_id}`
+                    const expanded = expandedKey === key
+                    const doc = q.document_id !== null ? documentCache[q.document_id] : undefined
+                    return (
+                      <li key={q.source_id}>
+                        <span className="chat-source-id">[{q.source_id}]</span>{' '}
+                        {q.geloescht || q.document_id === null ? (
+                          <span className="chat-warning">Quelle wurde inzwischen gelöscht</span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="chat-source-link"
+                              onClick={() => handleToggleSource(m.id, q.source_id, q.document_id!)}
+                            >
+                              {q.document_titel}
+                              {q.dokumentdatum && ` · ${q.dokumentdatum}`}
+                              {q.abschnitt && ` · ${q.abschnitt}`}
+                            </button>
+                            {expanded && (
+                              <div className="chat-source-preview">
+                                {loadingDocumentId === q.document_id && !doc && (
+                                  <p className="subtitle">Lade Dokument …</p>
+                                )}
+                                {doc && (
+                                  <>
+                                    {doc.typ === 'bild' && (
+                                      <img
+                                        className="overview-image-preview"
+                                        src={api.documentFileUrl(projectId, doc.id)}
+                                        alt={doc.titel}
+                                      />
+                                    )}
+                                    <pre className="overview-fulltext">{doc.inhalt ?? '(kein Inhalt)'}</pre>
+                                    {doc.dateiname && (
+                                      <a
+                                        href={api.documentFileUrl(projectId, doc.id)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        {doc.dateiname} herunterladen
+                                      </a>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>
@@ -215,6 +284,7 @@ export function ChatSection({ projectId }: Props) {
       </div>
 
       {error && <p className="status-error">{error}</p>}
+      {sourceError && <p className="status-error">{sourceError}</p>}
 
       <form className="chat-input-form" onSubmit={handleSend}>
         <input

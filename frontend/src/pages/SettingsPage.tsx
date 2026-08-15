@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type AppSettings, type UsageSummary } from '../api/client'
+import { api, type AppSettings, type ModelPricing, type UsageSummary } from '../api/client'
 
 type Props = {
   onBack: () => void
@@ -30,6 +30,15 @@ export function SettingsPage({ onBack }: Props) {
   const [chunkOverlapTokens, setChunkOverlapTokens] = useState(60)
   const [savingTuning, setSavingTuning] = useState(false)
 
+  const [wechselkurs, setWechselkurs] = useState(0.92)
+  const [savingWechselkurs, setSavingWechselkurs] = useState(false)
+  const [pricing, setPricing] = useState<ModelPricing[] | null>(null)
+  const [newPricingModell, setNewPricingModell] = useState('')
+  const [newPricingGueltigAb, setNewPricingGueltigAb] = useState('')
+  const [newPricingInput, setNewPricingInput] = useState(0)
+  const [newPricingOutput, setNewPricingOutput] = useState(0)
+  const [savingPricing, setSavingPricing] = useState(false)
+
   const load = () => {
     api
       .getSettings()
@@ -42,9 +51,11 @@ export function SettingsPage({ onBack }: Props) {
         setFinalK(s.final_k)
         setChunkZielTokens(s.chunk_ziel_tokens)
         setChunkOverlapTokens(s.chunk_overlap_tokens)
+        setWechselkurs(s.eur_usd_wechselkurs)
       })
       .catch((err: Error) => setError(err.message))
     api.getUsageSummary().then(setUsage).catch(() => {})
+    api.listPricing().then(setPricing).catch(() => {})
   }
 
   useEffect(() => {
@@ -92,6 +103,56 @@ export function SettingsPage({ onBack }: Props) {
       const updated = await api.updateSettings({ claude_model: claudeModel.trim() || null })
       setSettings(updated)
       flashSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handleSaveWechselkurs = async () => {
+    if (!(wechselkurs > 0)) return
+    setSavingWechselkurs(true)
+    setError(null)
+    try {
+      const updated = await api.updateSettings({ eur_usd_wechselkurs: wechselkurs })
+      setSettings(updated)
+      flashSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSavingWechselkurs(false)
+    }
+  }
+
+  const handleAddPricing = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!newPricingModell.trim() || !newPricingGueltigAb) return
+    setSavingPricing(true)
+    setError(null)
+    try {
+      const created = await api.createPricing({
+        modell_name: newPricingModell.trim(),
+        gueltig_ab: newPricingGueltigAb,
+        input_preis_pro_million_usd: newPricingInput,
+        output_preis_pro_million_usd: newPricingOutput,
+      })
+      setPricing((prev) => [created, ...(prev ?? [])])
+      setNewPricingModell('')
+      setNewPricingGueltigAb('')
+      setNewPricingInput(0)
+      setNewPricingOutput(0)
+      flashSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSavingPricing(false)
+    }
+  }
+
+  const handleDeletePricing = async (id: number) => {
+    setError(null)
+    try {
+      await api.deletePricing(id)
+      setPricing((prev) => prev?.filter((p) => p.id !== id) ?? null)
     } catch (err) {
       setError((err as Error).message)
     }
@@ -273,21 +334,135 @@ export function SettingsPage({ onBack }: Props) {
 
           <section className="settings-section">
             <h2>API-Nutzung</h2>
+            <p className="subtitle">
+              Kosten sind eine grobe Schätzung (Tokens × hinterlegter Preis × Wechselkurs, siehe
+              unten) – kein exakter Rechnungsbetrag.
+            </p>
             {usage === null ? (
               <p className="subtitle">Lade Nutzungsdaten …</p>
             ) : (
               <ul className="usage-summary">
                 <li>
-                  Heute: {usage.heute.anfragen} Anfragen · {usage.heute.tokens.toLocaleString('de-DE')} Tokens
+                  Heute: {usage.heute.anfragen} Anfragen · {usage.heute.tokens.toLocaleString('de-DE')}{' '}
+                  Tokens · ca. {usage.heute.kosten_eur.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                  {!usage.heute.vollstaendig && ' (unvollständig – nicht für alle Modelle ein Preis hinterlegt)'}
                 </li>
                 <li>
-                  Diese Woche: {usage.woche.anfragen} Anfragen · {usage.woche.tokens.toLocaleString('de-DE')} Tokens
+                  Diese Woche: {usage.woche.anfragen} Anfragen · {usage.woche.tokens.toLocaleString('de-DE')}{' '}
+                  Tokens · ca. {usage.woche.kosten_eur.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                  {!usage.woche.vollstaendig && ' (unvollständig)'}
                 </li>
                 <li>
-                  Diesen Monat: {usage.monat.anfragen} Anfragen · {usage.monat.tokens.toLocaleString('de-DE')} Tokens
+                  Diesen Monat: {usage.monat.anfragen} Anfragen · {usage.monat.tokens.toLocaleString('de-DE')}{' '}
+                  Tokens · ca. {usage.monat.kosten_eur.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                  {!usage.monat.vollstaendig && ' (unvollständig)'}
                 </li>
               </ul>
             )}
+          </section>
+
+          <section className="settings-section">
+            <h2>Preise & Wechselkurs</h2>
+            <p className="subtitle">
+              Grundlage für die Kostenschätzung oben. Kein automatischer Preisabruf – Preise
+              gelten ab ihrem "Gültig ab"-Datum, ändere sie hier, wenn Anthropic seine Preise
+              anpasst. Historische Auswertungen bleiben dabei korrekt: für jeden vergangenen
+              API-Aufruf wird der zu diesem Zeitpunkt gültige Preis verwendet, nicht rückwirkend
+              der neueste.
+            </p>
+            <div className="form-row">
+              <label className="form-field-label">
+                EUR/USD-Wechselkurs (1 USD in EUR)
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0.01}
+                  value={wechselkurs}
+                  onChange={(e) => setWechselkurs(Number(e.target.value))}
+                />
+              </label>
+              <button disabled={savingWechselkurs} onClick={handleSaveWechselkurs}>
+                {savingWechselkurs ? 'Speichert …' : 'Speichern'}
+              </button>
+            </div>
+
+            {pricing === null ? (
+              <p className="subtitle">Lade Preise …</p>
+            ) : pricing.length === 0 ? (
+              <p className="subtitle">Noch keine Preise hinterlegt.</p>
+            ) : (
+              <div className="overview-table-wrap">
+                <table className="overview-table">
+                  <thead>
+                    <tr>
+                      <th>Modell</th>
+                      <th>Gültig ab</th>
+                      <th>Input $/Mio.</th>
+                      <th>Output $/Mio.</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pricing.map((p) => (
+                      <tr key={p.id}>
+                        <td>{p.modell_name}</td>
+                        <td>{p.gueltig_ab}</td>
+                        <td>{p.input_preis_pro_million_usd.toFixed(2)}</td>
+                        <td>{p.output_preis_pro_million_usd.toFixed(2)}</td>
+                        <td>
+                          <button className="link-button" onClick={() => handleDeletePricing(p.id)}>
+                            Löschen
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <form className="create-document-form" onSubmit={handleAddPricing}>
+              <div className="form-row">
+                <input
+                  type="text"
+                  placeholder="Modellname (z. B. claude-opus-5)"
+                  value={newPricingModell}
+                  onChange={(e) => setNewPricingModell(e.target.value)}
+                  required
+                />
+                <input
+                  type="date"
+                  value={newPricingGueltigAb}
+                  onChange={(e) => setNewPricingGueltigAb(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="form-row">
+                <label className="form-field-label">
+                  Input $/Mio. Tokens
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={newPricingInput}
+                    onChange={(e) => setNewPricingInput(Number(e.target.value))}
+                  />
+                </label>
+                <label className="form-field-label">
+                  Output $/Mio. Tokens
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={newPricingOutput}
+                    onChange={(e) => setNewPricingOutput(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+              <button type="submit" disabled={savingPricing}>
+                {savingPricing ? 'Speichert …' : 'Preis hinzufügen'}
+              </button>
+            </form>
           </section>
         </>
       )}

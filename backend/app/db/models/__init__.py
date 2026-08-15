@@ -10,6 +10,7 @@ from app.db.models.chunk import Chunk
 from app.db.models.document import Document, DocumentTag
 from app.db.models.index_metadata import IndexMetadata
 from app.db.models.meeting import Meeting, MeetingParticipant
+from app.db.models.model_pricing import ModelPricing
 from app.db.models.person import Person
 from app.db.models.project import Project
 from app.db.models.tag import Tag
@@ -26,6 +27,7 @@ __all__ = [
     "IndexMetadata",
     "Meeting",
     "MeetingParticipant",
+    "ModelPricing",
     "Person",
     "Project",
     "Tag",
