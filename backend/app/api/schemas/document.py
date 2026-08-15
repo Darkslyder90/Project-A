@@ -28,6 +28,19 @@ class DocumentReviewSubmit(BaseModel):
     inhalt: str = Field(min_length=1)
 
 
+class DocumentUpdate(BaseModel):
+    """Nachtraegliche Bearbeitung (siehe Briefing Punkt 6: Titel, Inhalt, Typ,
+    Dokumentdatum sind editierbar). Alle Felder optional (PATCH-Semantik ueber
+    model_fields_set, siehe document_service.update_document) - Tags werden
+    weiterhin ueber die eigenen Tag-Endpunkte gepflegt, nicht hier.
+    """
+
+    titel: str | None = Field(default=None, min_length=1, max_length=300)
+    inhalt: str | None = Field(default=None, min_length=1)
+    typ: DocumentType | None = None
+    dokumentdatum: date | None = None
+
+
 class DocumentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

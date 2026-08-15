@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_task_runner
-from app.api.schemas.document import DocumentCreate, DocumentRead, DocumentReviewSubmit
+from app.api.schemas.document import DocumentCreate, DocumentRead, DocumentReviewSubmit, DocumentUpdate
 from app.api.schemas.tag import TagCreate
 from app.background.task_runner import DocumentTaskRunner
 from app.db.models.enums import DocumentType
@@ -65,6 +65,17 @@ async def upload_document(
 @router.get("/{document_id}", response_model=DocumentRead)
 def get_document(project_id: int, document_id: int, db: Session = Depends(get_db)) -> DocumentRead:
     return document_service.get_document(db, project_id, document_id)
+
+
+@router.patch("/{document_id}", response_model=DocumentRead)
+def update_document(
+    project_id: int,
+    document_id: int,
+    payload: DocumentUpdate,
+    db: Session = Depends(get_db),
+    task_runner: DocumentTaskRunner = Depends(get_task_runner),
+) -> DocumentRead:
+    return document_service.update_document(db, project_id, document_id, payload, task_runner)
 
 
 @router.get("/{document_id}/file")

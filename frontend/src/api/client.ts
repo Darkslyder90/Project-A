@@ -51,6 +51,13 @@ export type DocumentCreateInput = {
   dokumentdatum?: string | null
 }
 
+export type DocumentUpdateInput = {
+  titel?: string
+  inhalt?: string
+  typ?: DocumentType
+  dokumentdatum?: string | null
+}
+
 export type DocumentUploadInput = {
   file: File
   typ: DocumentType
@@ -299,6 +306,11 @@ export const api = {
   createDocument: (projectId: number, input: DocumentCreateInput) =>
     request<Document>(`/api/projects/${projectId}/documents`, {
       method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateDocument: (projectId: number, documentId: number, input: DocumentUpdateInput) =>
+    request<Document>(`/api/projects/${projectId}/documents/${documentId}`, {
+      method: 'PATCH',
       body: JSON.stringify(input),
     }),
   reprocessDocument: (projectId: number, documentId: number) =>

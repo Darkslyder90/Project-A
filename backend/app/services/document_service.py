@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.api.schemas.document import DocumentUpdate
 from app.background.task_runner import DocumentTaskRunner
 from app.config import get_settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
@@ -49,6 +50,59 @@ def get_document(db: Session, project_id: int, document_id: int) -> Document:
     )
     if document is None:
         raise NotFoundError(f"Document {document_id} wurde in Projekt {project_id} nicht gefunden.")
+    return document
+
+
+def update_document(
+    db: Session,
+    project_id: int,
+    document_id: int,
+    update: DocumentUpdate,
+    task_runner: DocumentTaskRunner,
+) -> Document:
+    """Nachtraegliche Bearbeitung (siehe Briefing Punkt 6). Titel-Aenderungen
+    sind trivial (nirgends denormalisiert). Typ-/Dokumentdatum-Aenderungen
+    aktualisieren zusaetzlich die auf Chunk denormalisierten Kopien dieser
+    Felder (fuer korrekte Quellenangaben), ohne die teure Neuindexierung
+    auszulösen - anders als bei einer inhaltlichen Aenderung: "Bei jeder
+    inhaltlichen Aenderung werden die bisherigen Chunks dieses Dokuments
+    entfernt und aus der aktuellen Version neu erzeugt" (Briefing) - dafuer
+    wird hier derselbe Status-Reset+Enqueue-Pfad wie bei "Neu indexieren"
+    genutzt, process_document() macht den Rest idempotent.
+    """
+    document = get_document(db, project_id, document_id)
+    fields = update.model_fields_set
+
+    inhalt_changed = "inhalt" in fields and update.inhalt != document.inhalt
+    metadata_changed = False
+
+    if "titel" in fields and update.titel is not None:
+        document.titel = update.titel
+    if "typ" in fields and update.typ is not None and update.typ != document.typ:
+        document.typ = update.typ
+        metadata_changed = True
+    if "dokumentdatum" in fields and update.dokumentdatum != document.dokumentdatum:
+        document.dokumentdatum = update.dokumentdatum
+        metadata_changed = True
+    if inhalt_changed:
+        document.inhalt = update.inhalt
+
+    db.commit()
+    db.refresh(document)
+
+    if metadata_changed and not inhalt_changed:
+        db.query(Chunk).filter(Chunk.document_id == document.id).update(
+            {"dokumenttyp": document.typ.value, "dokumentdatum": document.dokumentdatum}
+        )
+        db.commit()
+
+    if inhalt_changed:
+        document.status = DocumentStatus.PENDING
+        document.fehlermeldung = None
+        db.commit()
+        db.refresh(document)
+        task_runner.enqueue(document.id)
+
     return document
 
 

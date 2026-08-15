@@ -79,6 +79,18 @@ export function DocumentsSection({ projectId }: Props) {
   const [tags, setTags] = useState<Tag[]>([])
   const [newTagDrafts, setNewTagDrafts] = useState<Record<number, string>>({})
 
+  // Bearbeiten eines bestehenden Dokuments (Titel/Typ/Dokumentdatum/Inhalt,
+  // siehe Briefing Punkt 6) - editingId zeigt an, welches Dokument aktuell
+  // im Bearbeiten-Modus ist, editDraft haelt den Formular-Entwurf dafuer.
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editDraft, setEditDraft] = useState<{
+    titel: string
+    typ: DocumentType
+    dokumentdatum: string
+    inhalt: string
+  }>({ titel: '', typ: 'notiz', dokumentdatum: '', inhalt: '' })
+  const [savingEdit, setSavingEdit] = useState(false)
+
   const loadDocuments = () => {
     api
       .listDocuments(projectId)
@@ -251,6 +263,35 @@ export function DocumentsSection({ projectId }: Props) {
       setError((err as Error).message)
     } finally {
       setReprocessingId(null)
+    }
+  }
+
+  const startEdit = (doc: Document) => {
+    setEditingId(doc.id)
+    setEditDraft({
+      titel: doc.titel,
+      typ: doc.typ,
+      dokumentdatum: doc.dokumentdatum ?? '',
+      inhalt: doc.inhalt ?? '',
+    })
+  }
+
+  const handleSaveEdit = async (documentId: number) => {
+    setSavingEdit(true)
+    setError(null)
+    try {
+      const updated = await api.updateDocument(projectId, documentId, {
+        titel: editDraft.titel.trim(),
+        typ: editDraft.typ,
+        dokumentdatum: editDraft.dokumentdatum || null,
+        inhalt: editDraft.inhalt.trim(),
+      })
+      setDocuments((prev) => prev?.map((d) => (d.id === documentId ? updated : d)) ?? null)
+      setEditingId(null)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -477,13 +518,18 @@ export function DocumentsSection({ projectId }: Props) {
             </div>
             <div className="entity-actions">
               {(doc.status === 'ready' || doc.status === 'failed') && (
-                <button
-                  className="link-button"
-                  disabled={reprocessingId === doc.id}
-                  onClick={() => handleReprocess(doc.id)}
-                >
-                  {reprocessingId === doc.id ? 'Wird neu indexiert …' : 'Neu indexieren'}
-                </button>
+                <>
+                  <button className="link-button" onClick={() => startEdit(doc)}>
+                    Bearbeiten
+                  </button>
+                  <button
+                    className="link-button"
+                    disabled={reprocessingId === doc.id}
+                    onClick={() => handleReprocess(doc.id)}
+                  >
+                    {reprocessingId === doc.id ? 'Wird neu indexiert …' : 'Neu indexieren'}
+                  </button>
+                </>
               )}
               <button
                 className="link-button"
@@ -493,6 +539,50 @@ export function DocumentsSection({ projectId }: Props) {
                 {deletingId === doc.id ? 'Wird gelöscht …' : 'Löschen'}
               </button>
             </div>
+            {editingId === doc.id && (
+              <div className="entity-edit-form">
+                <div className="form-row">
+                  <select
+                    value={editDraft.typ}
+                    onChange={(e) => setEditDraft((d) => ({ ...d, typ: e.target.value as DocumentType }))}
+                  >
+                    {Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={editDraft.titel}
+                    onChange={(e) => setEditDraft((d) => ({ ...d, titel: e.target.value }))}
+                  />
+                  <input
+                    type="date"
+                    value={editDraft.dokumentdatum}
+                    onChange={(e) => setEditDraft((d) => ({ ...d, dokumentdatum: e.target.value }))}
+                  />
+                </div>
+                <textarea
+                  rows={6}
+                  value={editDraft.inhalt}
+                  onChange={(e) => setEditDraft((d) => ({ ...d, inhalt: e.target.value }))}
+                />
+                {editDraft.inhalt.trim() !== (doc.inhalt ?? '').trim() && (
+                  <p className="subtitle">
+                    Inhaltsänderung erkannt – das Dokument wird nach dem Speichern neu indexiert.
+                  </p>
+                )}
+                <div className="entity-edit-actions">
+                  <button disabled={savingEdit} onClick={() => handleSaveEdit(doc.id)}>
+                    {savingEdit ? 'Speichert …' : 'Speichern'}
+                  </button>
+                  <button className="link-button" onClick={() => setEditingId(null)}>
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            )}
             {doc.status === 'failed' && doc.fehlermeldung && (
               <div className="document-error">
                 <span>{doc.fehlermeldung}</span>

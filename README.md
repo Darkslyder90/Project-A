@@ -129,6 +129,17 @@ ursprünglichen 15 Schritte):
   **Hinweis:** der vorbefüllte Wechselkurs (0,92) ist ein grober Platzhalter
   ohne Anbindung an eine Live-Kursquelle – bitte in den Einstellungen mit
   dem tatsächlich aktuellen Kurs überschreiben.
+- **Dokumente sind nachträglich bearbeitbar** (Titel, Inhalt, Typ,
+  Dokumentdatum – siehe Briefing Punkt 6, war trotz expliziter
+  Anforderung in keinem der 15 Schritte umgesetzt worden, beim Testen
+  aufgefallen): neuer `PATCH`-Endpunkt pro Dokument. Titel-Änderungen sind
+  trivial; Typ-/Dokumentdatum-Änderungen aktualisieren zusätzlich die auf
+  `Chunk` denormalisierten Kopien dieser Felder (für korrekte
+  Quellenangaben im Chat), ohne die Vektoren neu zu berechnen; nur eine
+  **inhaltliche** Änderung stößt eine vollständige Neuindexierung an
+  (Status wechselt auf `pending`, alte Chunks werden ersetzt) – exakt wie
+  im Briefing gefordert: "Bei jeder inhaltlichen Änderung werden die
+  bisherigen Chunks entfernt und aus der aktuellen Version neu erzeugt."
 
 ## Lokale Entwicklung
 
