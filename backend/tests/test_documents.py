@@ -74,6 +74,45 @@ def test_reprocessing_document_does_not_duplicate_chunks(client, app):
     assert collection.count() == second_count
 
 
+def test_reprocess_all_documents_reprocesses_every_document_in_project(client):
+    project_id = _create_project(client)
+    doc_a = client.post(
+        f"/api/projects/{project_id}/documents",
+        json={"typ": "notiz", "titel": "A", "inhalt": "Erster Testtext ueber SAP MM."},
+    ).json()
+    doc_b = client.post(
+        f"/api/projects/{project_id}/documents",
+        json={"typ": "notiz", "titel": "B", "inhalt": "Zweiter Testtext ueber SAP SD."},
+    ).json()
+    wait_for_document_status(client, project_id, doc_a["id"])
+    wait_for_document_status(client, project_id, doc_b["id"])
+
+    response = client.post(f"/api/projects/{project_id}/documents/reprocess-all")
+    assert response.status_code == 200
+    body = response.json()
+    assert {d["id"] for d in body} == {doc_a["id"], doc_b["id"]}
+    assert all(d["status"] == "pending" for d in body)
+
+    final_a = wait_for_document_status(client, project_id, doc_a["id"])
+    final_b = wait_for_document_status(client, project_id, doc_b["id"])
+    assert final_a["status"] == "ready"
+    assert final_b["status"] == "ready"
+
+
+def test_reprocess_all_documents_is_isolated_between_projects(client):
+    project_a = _create_project(client)
+    project_b = client.post("/api/projects", json={"name": "Anderes Projekt"}).json()["id"]
+    doc = client.post(
+        f"/api/projects/{project_a}/documents",
+        json={"typ": "notiz", "titel": "A", "inhalt": "Text im Projekt A."},
+    ).json()
+    wait_for_document_status(client, project_a, doc["id"])
+
+    response = client.post(f"/api/projects/{project_b}/documents/reprocess-all")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_two_documents_in_same_project_share_index_version(client, app):
     project_id = _create_project(client)
     doc1 = client.post(

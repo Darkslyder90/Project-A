@@ -266,6 +266,25 @@ def reprocess_document(
     return document
 
 
+def reprocess_all_documents(db: Session, project_id: int, task_runner: DocumentTaskRunner) -> list[Document]:
+    """Projekt-weite Neuindexierung - einfache Variante: ruft reprocess_document()
+    nacheinander fuer jedes Dokument des Projekts auf.
+
+    Kein echtes Blue-Green-Rebuild (siehe IndexMetadata.rebuild_status/
+    pending_index_version/pending_collection_name im Datenmodell - dort fuer
+    einen spaeteren, aufwaendigeren Ausbau vorgesehen: neue Version komplett
+    parallel in einer zweiten Chroma-Collection aufbauen, erst danach atomar
+    umschalten). Hier wird stattdessen jedes Dokument einzeln kurz ueber die
+    bestehende Pipeline neu aufgebaut (loescht+erzeugt seine Chunks in der
+    aktiven Version neu) - fuer den Einzelnutzer-Betrieb ohne echte
+    Nebenlaeufigkeit ausreichend: der Rest des Projekts bleibt waehrenddessen
+    durchgehend abrufbar, nur das gerade verarbeitete Dokument ist kurz nicht
+    durchsuchbar.
+    """
+    documents = list_documents(db, project_id)
+    return [reprocess_document(db, project_id, document.id, task_runner) for document in documents]
+
+
 def confirm_image_review(
     db: Session, project_id: int, document_id: int, *, inhalt: str, task_runner: DocumentTaskRunner
 ) -> Document:

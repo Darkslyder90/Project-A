@@ -23,3 +23,14 @@ frontend/dist/
 
 # Claude Code lokale Session-Daten
 .claude/
+
+# Android
+android/local.properties
+android/.gradle/
+android/.idea/
+android/*/build/
+android/build/
+android/.cxx/
+android/*.iml
+android/captures/
+

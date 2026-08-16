@@ -62,6 +62,19 @@ async def upload_document(
     )
 
 
+# Statischer Pfad ("/reprocess-all") bewusst VOR den "/{document_id}"-Routen
+# registriert (siehe gleiches Muster in routes/projects.py) - unabhaengig
+# davon waere hier ohnehin keine Kollision moeglich, da "reprocess-all" nicht
+# dem Schema "{document_id}/..." entspricht.
+@router.post("/reprocess-all", response_model=list[DocumentRead])
+def reprocess_all_documents(
+    project_id: int,
+    db: Session = Depends(get_db),
+    task_runner: DocumentTaskRunner = Depends(get_task_runner),
+) -> list[DocumentRead]:
+    return document_service.reprocess_all_documents(db, project_id, task_runner)
+
+
 @router.get("/{document_id}", response_model=DocumentRead)
 def get_document(project_id: int, document_id: int, db: Session = Depends(get_db)) -> DocumentRead:
     return document_service.get_document(db, project_id, document_id)

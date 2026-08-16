@@ -203,16 +203,40 @@ Entwicklung nutzt bewusst **kein** Docker (siehe oben). Drei Container:
 ```bash
 git clone <repo-url> project-a
 cd project-a
-cp .env.example .env        # DOMAIN, BASIC_AUTH_*, SETTINGS_ENCRYPTION_KEY setzen
-docker compose build
-docker compose run --rm backend alembic upgrade head
-docker compose up -d
+cp .env.example .env
 ```
 
-`SETTINGS_ENCRYPTION_KEY` erzeugen mit:
-`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
-`BASIC_AUTH_PASSWORD_HASH` erzeugen mit:
-`docker run --rm caddy caddy hash-password --plaintext 'dein-passwort'`
+`.env` ausfuellen - **Reihenfolge wichtig**: `docker compose` validiert beim
+Parsen der `docker-compose.yml` alle darin referenzierten Pflichtvariablen auf
+einmal (`DOMAIN`, `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD_HASH`,
+`SETTINGS_ENCRYPTION_KEY`) - ohne vollstaendig ausgefuellte `.env`
+funktioniert daher noch KEIN `docker compose`-Befehl, auch nicht `build`.
+
+1. `DOMAIN` und `BASIC_AUTH_USER` direkt eintragen (einfacher Text).
+2. `BASIC_AUTH_PASSWORD_HASH` erzeugen (bare `docker run`, unabhaengig von
+   der `.env`-Validierung):
+   ```bash
+   docker run --rm caddy caddy hash-password --plaintext 'dein-passwort'
+   ```
+   **Falle:** der bcrypt-Hash enthaelt `$`-Zeichen (z. B. `$2a$14$...`).
+   Docker Compose interpoliert `.env`-Werte genau wie die Compose-Datei selbst
+   - jedes `$` muss deshalb beim Eintragen in `.env` als `$$` geschrieben
+   werden, sonst wird der Wert beim Start lautlos zerstueckelt (erkennbar an
+   einer Warnung wie `The "..." variable is not set` mit einem Fragment des
+   Hashs als Variablenname). Beispiel: `$2a$14$abc...` -> `$$2a$$14$$abc...`.
+3. `SETTINGS_ENCRYPTION_KEY` erzeugen - bewusst OHNE das `cryptography`-Paket
+   (ein Fernet-Key ist einfach 32 zufaellige Bytes, base64-urlsafe-kodiert;
+   das schlanke `python:3.14-slim`-Image hat `cryptography` nicht
+   vorinstalliert):
+   ```bash
+   docker run --rm python:3.14-slim python -c "import secrets, base64; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+   ```
+4. Erst jetzt, mit vollstaendig ausgefuellter `.env`:
+   ```bash
+   docker compose build
+   docker compose run --rm backend alembic upgrade head
+   docker compose up -d
+   ```
 
 **Encryption-Secret (wichtig):** `SETTINGS_ENCRYPTION_KEY` bleibt bewusst
 außerhalb der SQLite-Datenbank und ist **nicht** Teil der automatischen
@@ -715,3 +739,62 @@ Briefing-Abschnitt "Umgang mit technischen Entscheidungen"):
 `DATA_DIR` ist in Dev standardmäßig `<repo-root>/data-dev`, in Prod wird es per
 `.env`/Docker-Volume auf einen Pfad außerhalb des Containers gesetzt (z. B.
 `/data`) – siehe `backend/.env.example`.
+
+## Android Companion App (in Arbeit)
+
+Natives Kotlin/Jetpack-Compose-Projekt unter `android/`, spricht direkt gegen
+dieselbe REST-API wie das Web-Frontend (keine eigene Backend-Logik, keine
+eigene Datenbank). Bewusst reduzierter Funktionsumfang gegenüber dem Web
+(kein Play-Store-Release, Sideload-APK) – siehe eigenes Mobile-Briefing.
+
+**Öffnen/Bauen:** Ordner `android/` in Android Studio öffnen (JDK 17,
+minSdk 26). Beim ersten Öffnen ggf. den Gradle-Wrapper synchronisieren lassen
+(Android Studio bietet das automatisch an, falls `gradlew`/`gradle-wrapper.jar`
+fehlen). Kein Android-SDK auf dem Entwicklungsrechner der Backend/Web-Teile
+vorhanden – Bauen/Testen läuft daher ausschließlich über Android Studio auf
+dem eigenen Gerät, nicht Teil der `docker compose`-Pipeline.
+
+**Auth:** Server-URL + Basic-Auth-Zugangsdaten (dieselben wie vor der Web-App,
+siehe Caddy-Setup oben) werden einmalig im Login-Screen erfasst und
+verschlüsselt über `EncryptedSharedPreferences` (Android Keystore-gestützt)
+auf dem Gerät gespeichert – kein erneutes Anmelden bei jedem App-Start. Bei
+einer 401-Antwort (z. B. nach Passwortänderung) leitet die App automatisch
+zurück zum Login-Screen (siehe `AuthEventBus`).
+
+**Stand:** Schritt 7 von 7 umgesetzt - alle geplanten Schritte fertig
+(Projektauswahl, Chat inkl.
+Senden, alle Anlage-Formulare: Dokument/Notiz, Foto-Upload, Person, Meeting).
+Meeting-Erstellung baut client-seitig auf zwei bestehenden Endpunkten auf
+(erst Dokument typ=meeting aus dem Transkript anlegen, dann das Meeting damit
+verknüpfen) - das Backend selbst erzeugt kein Dokument automatisch.
+Foto-Upload nutzt `ACTION_IMAGE_CAPTURE` per System-Kamera-App (kein eigenes
+CAMERA-Runtime-Permission nötig) oder Galerie-Auswahl, lädt über denselben
+Multipart-Endpoint wie das Web hoch und pollt den Verarbeitungsstatus bis zum
+Review-Schritt (KI-erkannter Text bestätigen/korrigieren) oder bis "ready".
+Dritter Bottom-Nav-Tab "Dokumente": schlichte Auswahl-/Sprungliste (Titel,
+Typ, Status, Datum) ohne Filter/Vorschaubilder, Antippen öffnet die
+Detailansicht - dient nur zum Auffinden eines Dokuments, siehe Briefing
+"Nicht enthalten". Diese Detailansicht ist editierbar (Typ, Titel,
+Dokumentdatum, Inhalt per PATCH, nur tatsächlich geänderte Felder werden
+gesendet) und jetzt auch löschbar (Sicherheitsabfrage per Dialog; Server
+blockiert mit einer klaren Fehlermeldung, wenn das Dokument ein
+Meeting-Pflichtprotokoll ist - "lösche stattdessen das Meeting", identisch
+zur Web-Logik; Task-Verknüpfungen werden serverseitig automatisch mit
+entfernt, ohne gesonderten Hinweis in der App nötig). Liste lädt sich beim
+Zurückkehren aus der Detailansicht automatisch neu, damit Löschungen/
+Änderungen sofort sichtbar sind.
+
+**Re-Indexierung (Schritt 7):** "Neu indexieren" pro Dokument (bestehender
+Endpoint) sowie "Gesamtes Projekt neu indexieren" (neuer Endpoint
+`POST /api/projects/{id}/documents/reprocess-all`, `document_service.
+reprocess_all_documents()`, 2 neue Backend-Tests, 158/158 grün). Bewusst
+**keine echte Blue-Green-Neuindexierung** (das im Briefing beschriebene
+Verfahren mit `pending_index_version`/zweiter Chroma-Collection und
+atomarem Swap existiert im Datenmodell, aber nirgends als Code - eigenes,
+nicht-triviales Stück Arbeit für einen späteren Zeitpunkt, siehe Entscheidung
+mit dem Nutzer). Stattdessen einfache Variante: ruft `reprocess_document()`
+nacheinander für jedes Dokument auf - der Rest des Projekts bleibt dabei
+durchgehend durchsuchbar, nur das jeweils gerade verarbeitete Dokument kurz
+nicht. Beide Varianten zeigen währenddessen "Index wird aktualisiert" (mit
+Polling, wie beim Foto-Review-Schritt) und eine Sicherheitsabfrage vor dem
+Projekt-weiten Lauf.
