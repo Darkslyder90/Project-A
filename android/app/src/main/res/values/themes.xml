@@ -1,0 +1,10 @@
+<resources>
+    <!-- Nur der Launch-Hintergrund vor dem ersten Compose-Frame; das eigentliche
+         Theming (Dunkelmodus als Standard, siehe Briefing) passiert in
+         ui/theme/Theme.kt ueber Compose Material3, nicht hier. -->
+    <style name="Theme.ProjectAMobile" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background</item>
+        <item name="android:statusBarColor">@color/launch_background</item>
+        <item name="android:navigationBarColor">@color/launch_background</item>
+    </style>
+</resources>
