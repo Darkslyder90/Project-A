@@ -14,6 +14,7 @@ enum class DocumentType {
     @SerialName("datei") DATEI,
     @SerialName("bild") BILD,
     @SerialName("sonstiges") SONSTIGES,
+    @SerialName("email") EMAIL,
 }
 
 // Nur die Typen, die im "Neu anlegen"-Formular ohne Datei/Bild sinnvoll sind

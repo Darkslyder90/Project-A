@@ -11,6 +11,7 @@ fun DocumentType.label(): String = when (this) {
     DocumentType.MEETING -> "Meeting"
     DocumentType.DATEI -> "Datei"
     DocumentType.BILD -> "Bild"
+    DocumentType.EMAIL -> "E-Mail"
 }
 
 fun DocumentStatus.label(): String = when (this) {

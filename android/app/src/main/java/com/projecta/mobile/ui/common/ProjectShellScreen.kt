@@ -12,6 +12,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -35,12 +38,22 @@ fun ProjectShellScreen(projectId: Int) {
     val backStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    // Hier statt in DocumentsTabScreen gehalten, damit eine Quellenangabe im
+    // Chat direkt ein Dokument im Dokumente-Tab oeffnen kann (siehe
+    // ChatScreen::onOpenDocument), nicht nur ein Tap in dessen eigener Liste.
+    var selectedDocumentId by remember { mutableStateOf<Int?>(null) }
+
     fun navigateToTab(route: String) {
         tabNavController.navigate(route) {
             popUpTo(tabNavController.graph.startDestinationId) { saveState = true }
             launchSingleTop = true
             restoreState = true
         }
+    }
+
+    fun openDocument(documentId: Int) {
+        selectedDocumentId = documentId
+        navigateToTab(ShellTabs.DOCUMENTS)
     }
 
     Scaffold(
@@ -72,9 +85,15 @@ fun ProjectShellScreen(projectId: Int) {
             startDestination = ShellTabs.CHAT,
             modifier = Modifier.padding(padding),
         ) {
-            composable(ShellTabs.CHAT) { ChatScreen(projectId) }
+            composable(ShellTabs.CHAT) { ChatScreen(projectId, onOpenDocument = ::openDocument) }
             composable(ShellTabs.CREATE) { CreateScreen(projectId) }
-            composable(ShellTabs.DOCUMENTS) { DocumentsTabScreen(projectId) }
+            composable(ShellTabs.DOCUMENTS) {
+                DocumentsTabScreen(
+                    projectId = projectId,
+                    selectedDocumentId = selectedDocumentId,
+                    onDocumentSelected = { selectedDocumentId = it },
+                )
+            }
         }
     }
 }

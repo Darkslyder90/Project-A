@@ -1,5 +1,6 @@
 package com.projecta.mobile.ui.chat
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,7 +48,7 @@ import com.projecta.mobile.projectAApplication
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(projectId: Int) {
+fun ChatScreen(projectId: Int, onOpenDocument: (Int) -> Unit) {
     val app = androidx.compose.ui.platform.LocalContext.current.projectAApplication()
     val viewModel: ChatViewModel = viewModel(
         key = "chat-$projectId",
@@ -130,7 +131,7 @@ fun ChatScreen(projectId: Int) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(state.messages, key = { it.id }) { message ->
-                        ChatMessageBubble(message)
+                        ChatMessageBubble(message, onOpenDocument = onOpenDocument)
                     }
                 }
             }
@@ -139,7 +140,7 @@ fun ChatScreen(projectId: Int) {
 }
 
 @Composable
-private fun ChatMessageBubble(message: ChatMessageDto) {
+private fun ChatMessageBubble(message: ChatMessageDto, onOpenDocument: (Int) -> Unit) {
     val isUser = message.rolle == "user"
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -163,22 +164,32 @@ private fun ChatMessageBubble(message: ChatMessageDto) {
         }
         if (!isUser && !message.quellen.isNullOrEmpty()) {
             Column(modifier = Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp)) {
-                message.quellen.forEach { source -> SourceLine(source) }
+                message.quellen.forEach { source ->
+                    SourceLine(source, onClick = { onOpenDocument(source.documentId) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SourceLine(source: ChatSourceSnapshotDto) {
+private fun SourceLine(source: ChatSourceSnapshotDto, onClick: () -> Unit) {
     val parts = listOfNotNull(
         source.documentTitel,
         source.dokumentdatum,
         source.abschnitt,
     ).joinToString(" · ")
+    // Geloeschte Quellen sind nicht antippbar (Detailansicht wuerde ohnehin
+    // nur einen 404-Fehler zeigen) - bleiben rein informativ.
+    val modifier = if (source.geloescht) Modifier else Modifier.clickable(onClick = onClick)
     Text(
         text = if (source.geloescht) "$parts (geloescht)" else parts,
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (source.geloescht) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.primary
+        },
+        modifier = modifier.padding(vertical = 2.dp),
     )
 }
