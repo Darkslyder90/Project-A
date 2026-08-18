@@ -22,6 +22,7 @@ const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   datei: 'Datei',
   bild: 'Bild',
   sonstiges: 'Sonstiges',
+  email: 'E-Mail',
 }
 
 const STATUS_LABELS: Record<Document['status'], string> = {

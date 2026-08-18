@@ -16,6 +16,7 @@ const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   datei: 'Datei',
   bild: 'Bild',
   sonstiges: 'Sonstiges',
+  email: 'E-Mail',
 }
 
 // Nur diese Typen sind ueber die Formulare waehlbar - 'datei'/'bild' werden

@@ -18,6 +18,7 @@ export type DocumentType =
   | 'datei'
   | 'bild'
   | 'sonstiges'
+  | 'email'
 
 export type DocumentStatus = 'pending' | 'processing' | 'review_required' | 'indexing' | 'ready' | 'failed'
 
@@ -253,6 +254,37 @@ export type ModelPricingCreateInput = {
   cache_read_preis_pro_million_usd?: number | null
 }
 
+// Outlook-Ordnerueberwachung (siehe PROJECT_BRIEFING.md Kernfunktion 12).
+// OAuth-Konto ist global (ein Microsoft-Konto pro Instanz), EmailWatchConfig
+// ist pro Projekt (Ordner-Zuordnung).
+export type OAuthStatus = {
+  connected: boolean
+  account_email: string | null
+  access_token_expires_am: string | null
+}
+
+export type MailFolder = {
+  id: string
+  name: string
+}
+
+export type EmailWatchConfig = {
+  project_id: number
+  outlook_ordner_id: string
+  outlook_ordner_name: string
+  aktiv: boolean
+  polling_intervall_minuten: number
+  letzte_abfrage_am: string | null
+  letzter_fehler: string | null
+}
+
+export type EmailWatchConfigInput = {
+  outlook_ordner_id: string
+  outlook_ordner_name: string
+  aktiv: boolean
+  polling_intervall_minuten: number
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -442,4 +474,22 @@ export const api = {
   createPricing: (input: ModelPricingCreateInput) =>
     request<ModelPricing>('/api/settings/pricing', { method: 'POST', body: JSON.stringify(input) }),
   deletePricing: (id: number) => request<void>(`/api/settings/pricing/${id}`, { method: 'DELETE' }),
+
+  // Outlook-Ordnerueberwachung (Kernfunktion 12) - OAuth global, Ordner-Config pro Projekt.
+  getOAuthStatus: () => request<OAuthStatus>('/api/email-watch/oauth/status'),
+  startOAuthLogin: () => request<{ authorization_url: string }>('/api/email-watch/oauth/login'),
+  disconnectOAuth: () => request<void>('/api/email-watch/oauth/disconnect', { method: 'POST' }),
+  listMailFolders: () => request<MailFolder[]>('/api/email-watch/folders'),
+
+  getEmailWatchConfig: (projectId: number) =>
+    request<EmailWatchConfig | null>(`/api/projects/${projectId}/email-watch-config`),
+  saveEmailWatchConfig: (projectId: number, input: EmailWatchConfigInput) =>
+    request<EmailWatchConfig>(`/api/projects/${projectId}/email-watch-config`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  deleteEmailWatchConfig: (projectId: number) =>
+    request<void>(`/api/projects/${projectId}/email-watch-config`, { method: 'DELETE' }),
+  pollEmailWatchNow: (projectId: number) =>
+    request<EmailWatchConfig>(`/api/projects/${projectId}/email-watch-config/poll-now`, { method: 'POST' }),
 }

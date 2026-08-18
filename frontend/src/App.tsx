@@ -25,7 +25,11 @@ function BackendStatusBadge() {
 
 function App() {
   const [activeProjectId, setActiveProjectId] = useActiveProjectId()
-  const [showSettings, setShowSettings] = useState(false)
+  // Landet nach dem Microsoft-OAuth-Redirect direkt in den Settings (siehe
+  // backend/app/api/routes/email_watch.py::oauth_callback -> /settings?outlook_oauth=...).
+  const [showSettings, setShowSettings] = useState(
+    () => new URLSearchParams(window.location.search).has('outlook_oauth'),
+  )
 
   return (
     <main className="app-shell">
@@ -37,7 +41,7 @@ function App() {
       </div>
 
       {showSettings ? (
-        <SettingsPage onBack={() => setShowSettings(false)} />
+        <SettingsPage onBack={() => setShowSettings(false)} activeProjectId={activeProjectId} />
       ) : activeProjectId === null ? (
         <ProjectsPage onSelect={setActiveProjectId} />
       ) : (

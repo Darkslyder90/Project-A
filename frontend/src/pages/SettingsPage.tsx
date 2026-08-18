@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react'
-import { api, type AppSettings, type ModelPricing, type UsageSummary } from '../api/client'
+import {
+  api,
+  type AppSettings,
+  type EmailWatchConfig,
+  type MailFolder,
+  type ModelPricing,
+  type OAuthStatus,
+  type UsageSummary,
+} from '../api/client'
 
 type Props = {
   onBack: () => void
+  activeProjectId: number | null
 }
 
 const API_KEY_STATUS_LABELS: Record<AppSettings['claude_api_key_status'], string> = {
@@ -12,7 +21,7 @@ const API_KEY_STATUS_LABELS: Record<AppSettings['claude_api_key_status'], string
   none: 'Kein Claude-API-Key konfiguriert',
 }
 
-export function SettingsPage({ onBack }: Props) {
+export function SettingsPage({ onBack, activeProjectId }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [usage, setUsage] = useState<UsageSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -39,6 +48,34 @@ export function SettingsPage({ onBack }: Props) {
   const [newPricingOutput, setNewPricingOutput] = useState(0)
   const [savingPricing, setSavingPricing] = useState(false)
 
+  const [oauthStatus, setOauthStatus] = useState<OAuthStatus | null>(null)
+  const [oauthRedirectMessage, setOauthRedirectMessage] = useState<string | null>(null)
+  const [connectingOAuth, setConnectingOAuth] = useState(false)
+  const [mailFolders, setMailFolders] = useState<MailFolder[] | null>(null)
+  const [emailWatchConfig, setEmailWatchConfig] = useState<EmailWatchConfig | null>(null)
+  const [selectedFolderId, setSelectedFolderId] = useState('')
+  const [pollingIntervall, setPollingIntervall] = useState(10)
+  const [watchAktiv, setWatchAktiv] = useState(true)
+  const [savingEmailWatch, setSavingEmailWatch] = useState(false)
+  const [pollingNow, setPollingNow] = useState(false)
+
+  const loadEmailWatch = () => {
+    api.getOAuthStatus().then(setOauthStatus).catch(() => {})
+    if (activeProjectId !== null) {
+      api
+        .getEmailWatchConfig(activeProjectId)
+        .then((config) => {
+          setEmailWatchConfig(config)
+          if (config) {
+            setSelectedFolderId(config.outlook_ordner_id)
+            setPollingIntervall(config.polling_intervall_minuten)
+            setWatchAktiv(config.aktiv)
+          }
+        })
+        .catch(() => {})
+    }
+  }
+
   const load = () => {
     api
       .getSettings()
@@ -60,6 +97,20 @@ export function SettingsPage({ onBack }: Props) {
 
   useEffect(() => {
     load()
+    loadEmailWatch()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProjectId])
+
+  useEffect(() => {
+    const outlookOauth = new URLSearchParams(window.location.search).get('outlook_oauth')
+    if (outlookOauth === 'success') {
+      setOauthRedirectMessage('Microsoft-Konto erfolgreich verbunden.')
+    } else if (outlookOauth === 'error') {
+      setOauthRedirectMessage('Verbindung mit Microsoft fehlgeschlagen. Bitte erneut versuchen.')
+    }
+    if (outlookOauth !== null) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
   }, [])
 
   const flashSaved = () => {
@@ -180,6 +231,89 @@ export function SettingsPage({ onBack }: Props) {
     }
   }
 
+  const handleConnectOAuth = async () => {
+    setConnectingOAuth(true)
+    setError(null)
+    try {
+      const { authorization_url } = await api.startOAuthLogin()
+      window.location.href = authorization_url
+    } catch (err) {
+      setError((err as Error).message)
+      setConnectingOAuth(false)
+    }
+  }
+
+  const handleDisconnectOAuth = async () => {
+    if (!confirm('Microsoft-Konto trennen? Alle projektbezogenen Ordner-Überwachungen können dann keine neuen Mails mehr abrufen, bis erneut verbunden wird.')) {
+      return
+    }
+    setError(null)
+    try {
+      await api.disconnectOAuth()
+      loadEmailWatch()
+      setMailFolders(null)
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handleLoadFolders = async () => {
+    setError(null)
+    try {
+      setMailFolders(await api.listMailFolders())
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handleSaveEmailWatch = async () => {
+    if (activeProjectId === null || !selectedFolderId) return
+    const folderName = mailFolders?.find((f) => f.id === selectedFolderId)?.name ?? selectedFolderId
+    setSavingEmailWatch(true)
+    setError(null)
+    try {
+      const saved = await api.saveEmailWatchConfig(activeProjectId, {
+        outlook_ordner_id: selectedFolderId,
+        outlook_ordner_name: folderName,
+        aktiv: watchAktiv,
+        polling_intervall_minuten: pollingIntervall,
+      })
+      setEmailWatchConfig(saved)
+      flashSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSavingEmailWatch(false)
+    }
+  }
+
+  const handleDeleteEmailWatch = async () => {
+    if (activeProjectId === null) return
+    if (!confirm('Outlook-Ordnerüberwachung für dieses Projekt entfernen?')) return
+    setError(null)
+    try {
+      await api.deleteEmailWatchConfig(activeProjectId)
+      setEmailWatchConfig(null)
+      setSelectedFolderId('')
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handlePollNow = async () => {
+    if (activeProjectId === null) return
+    setPollingNow(true)
+    setError(null)
+    try {
+      setEmailWatchConfig(await api.pollEmailWatchNow(activeProjectId))
+      flashSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setPollingNow(false)
+    }
+  }
+
   return (
     <div className="settings-page">
       <header className="project-home-header">
@@ -189,6 +323,11 @@ export function SettingsPage({ onBack }: Props) {
 
       {error && <p className="status-error">{error}</p>}
       {saved && <p className="status-ok">Gespeichert.</p>}
+      {oauthRedirectMessage && (
+        <p className={oauthRedirectMessage.includes('fehlgeschlagen') ? 'status-error' : 'status-ok'}>
+          {oauthRedirectMessage}
+        </p>
+      )}
       {settings === null && !error && <p className="subtitle">Lade Einstellungen …</p>}
 
       {settings && (
@@ -463,6 +602,107 @@ export function SettingsPage({ onBack }: Props) {
                 {savingPricing ? 'Speichert …' : 'Preis hinzufügen'}
               </button>
             </form>
+          </section>
+
+          <section className="settings-section">
+            <h2>Outlook-Ordnerüberwachung</h2>
+            <p className="subtitle">
+              Legt neue eingehende Mails aus einem festen Outlook-Ordner automatisch als Dokument im
+              zugeordneten Projekt an (nur Betreff + Text, keine Anhänge; Mails älter als 1 Woche
+              werden nie abgeholt). Das Microsoft-Konto ist global – mehrere Projekte können jeweils
+              einen eigenen Ordner desselben Kontos überwachen.
+            </p>
+
+            {oauthStatus === null ? (
+              <p className="subtitle">Lade Verbindungsstatus …</p>
+            ) : oauthStatus.connected ? (
+              <>
+                <p>
+                  Verbunden als <strong>{oauthStatus.account_email ?? 'unbekanntes Konto'}</strong>.
+                </p>
+                <button className="link-button" onClick={handleDisconnectOAuth}>
+                  Microsoft-Konto trennen
+                </button>
+              </>
+            ) : (
+              <>
+                <p>Kein Microsoft-Konto verbunden.</p>
+                <button disabled={connectingOAuth} onClick={handleConnectOAuth}>
+                  {connectingOAuth ? 'Weiterleitung …' : 'Mit Microsoft verbinden'}
+                </button>
+              </>
+            )}
+
+            {activeProjectId === null ? (
+              <p className="subtitle" style={{ marginTop: '1rem' }}>
+                Wähle zuerst ein Projekt aus, um dessen Ordner-Zuordnung zu konfigurieren.
+              </p>
+            ) : (
+              <div style={{ marginTop: '1rem' }}>
+                <h3>Ordner für aktuelles Projekt</h3>
+                {emailWatchConfig && (
+                  <p className="subtitle">
+                    Zugeordneter Ordner: <strong>{emailWatchConfig.outlook_ordner_name}</strong> ·{' '}
+                    {emailWatchConfig.aktiv ? 'aktiv' : 'pausiert'} · zuletzt abgefragt:{' '}
+                    {emailWatchConfig.letzte_abfrage_am
+                      ? new Date(emailWatchConfig.letzte_abfrage_am).toLocaleString('de-DE')
+                      : 'noch nie'}
+                    {emailWatchConfig.letzter_fehler && (
+                      <>
+                        {' '}
+                        — <span className="status-error">Fehler: {emailWatchConfig.letzter_fehler}</span>
+                      </>
+                    )}
+                  </p>
+                )}
+
+                {oauthStatus?.connected && (
+                  <div className="form-row">
+                    {mailFolders === null ? (
+                      <button className="link-button" onClick={handleLoadFolders}>
+                        Ordnerliste laden
+                      </button>
+                    ) : (
+                      <select value={selectedFolderId} onChange={(e) => setSelectedFolderId(e.target.value)}>
+                        <option value="">Ordner wählen …</option>
+                        {mailFolders.map((folder) => (
+                          <option key={folder.id} value={folder.id}>
+                            {folder.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <label className="form-field-label">
+                      Intervall (Minuten)
+                      <input
+                        type="number"
+                        min={1}
+                        max={1440}
+                        value={pollingIntervall}
+                        onChange={(e) => setPollingIntervall(Number(e.target.value))}
+                      />
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={watchAktiv} onChange={(e) => setWatchAktiv(e.target.checked)} />
+                      {' '}aktiv
+                    </label>
+                    <button disabled={savingEmailWatch || !selectedFolderId} onClick={handleSaveEmailWatch}>
+                      {savingEmailWatch ? 'Speichert …' : 'Speichern'}
+                    </button>
+                    {emailWatchConfig && (
+                      <>
+                        <button disabled={pollingNow} onClick={handlePollNow}>
+                          {pollingNow ? 'Ruft ab …' : 'Jetzt abrufen'}
+                        </button>
+                        <button className="link-button" onClick={handleDeleteEmailWatch}>
+                          Entfernen
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         </>
       )}
