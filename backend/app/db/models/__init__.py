@@ -8,6 +8,8 @@ from app.db.models.app_settings import AppSettings
 from app.db.models.chat import ChatConversation, ChatMessage
 from app.db.models.chunk import Chunk
 from app.db.models.document import Document, DocumentTag
+from app.db.models.email_oauth_account import EmailOAuthAccount
+from app.db.models.email_watch_config import EmailWatchConfig
 from app.db.models.index_metadata import IndexMetadata
 from app.db.models.meeting import Meeting, MeetingParticipant
 from app.db.models.model_pricing import ModelPricing
@@ -24,6 +26,8 @@ __all__ = [
     "Chunk",
     "Document",
     "DocumentTag",
+    "EmailOAuthAccount",
+    "EmailWatchConfig",
     "IndexMetadata",
     "Meeting",
     "MeetingParticipant",

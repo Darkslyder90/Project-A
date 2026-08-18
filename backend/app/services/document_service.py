@@ -115,7 +115,14 @@ def create_manual_document(
     inhalt: str,
     dokumentdatum: date | None,
     task_runner: DocumentTaskRunner,
+    dateiname: str | None = None,
+    outlook_message_id: str | None = None,
 ) -> Document:
+    """dateiname/outlook_message_id sind optional und werden ausschliesslich von
+    der Outlook-Ordnerueberwachung genutzt (siehe Briefing Kernfunktion 12) -
+    dort dient outlook_message_id als mail-spezifische Duplikatserkennung
+    anstelle von datei_hash (siehe find_document_by_outlook_message_id).
+    """
     get_project(db, project_id)  # 404, falls Projekt nicht existiert (statt IntegrityError)
 
     document = Document(
@@ -125,6 +132,8 @@ def create_manual_document(
         inhalt=inhalt,
         status=DocumentStatus.PENDING,
         dokumentdatum=dokumentdatum or date.today(),
+        dateiname=dateiname,
+        outlook_message_id=outlook_message_id,
     )
     db.add(document)
     db.commit()
@@ -136,6 +145,18 @@ def create_manual_document(
     # Fortschritt ueber GET .../documents/{id}.
     task_runner.enqueue(document.id)
     return document
+
+
+def find_document_by_outlook_message_id(db: Session, project_id: int, outlook_message_id: str) -> Document | None:
+    return (
+        db.query(Document)
+        .filter(
+            Document.project_id == project_id,
+            Document.outlook_message_id == outlook_message_id,
+            Document.deleted_at.is_(None),
+        )
+        .first()
+    )
 
 
 def find_duplicate(db: Session, project_id: int, datei_hash: str) -> Document | None:

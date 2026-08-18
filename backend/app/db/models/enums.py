@@ -9,6 +9,7 @@ class DocumentType(str, enum.Enum):
     DATEI = "datei"
     BILD = "bild"
     SONSTIGES = "sonstiges"
+    EMAIL = "email"
 
 
 class DocumentStatus(str, enum.Enum):

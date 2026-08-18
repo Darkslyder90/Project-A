@@ -140,6 +140,30 @@ ursprünglichen 15 Schritte):
   (Status wechselt auf `pending`, alte Chunks werden ersetzt) – exakt wie
   im Briefing gefordert: "Bei jeder inhaltlichen Änderung werden die
   bisherigen Chunks entfernt und aus der aktuellen Version neu erzeugt."
+- **Outlook-Ordnerüberwachung** (Briefing-Erweiterung, Kernfunktion 12):
+  überwacht optional einen festen Outlook-Ordner per **Microsoft Graph API**
+  (OAuth2, delegated `Mail.Read`, via `msal`) und legt neue Mails automatisch
+  als Document (`typ=email`) an – Betreff als Titel, Klartext-Body (HTML wird
+  konvertiert), Empfangszeitpunkt als `dokumentdatum`. Neue Tabellen
+  `email_oauth_accounts` (ein globales Microsoft-Konto pro Instanz,
+  verschlüsselte Tokens – wiederverwendet `SETTINGS_ENCRYPTION_KEY`, kein
+  zweites Secret) und `email_watch_configs` (Ordner-Zuordnung pro Projekt).
+  Duplikaterkennung über `Document.outlook_message_id` statt Datei-Hash.
+  Polling (kein Webhook) per `APScheduler`-Job, konzeptionell getrennt vom
+  bestehenden `DocumentTaskRunner`, Default alle 10 Min., konfigurierbar pro
+  Projekt; **Mails älter als 1 Woche werden nie abgeholt**, auch nicht beim
+  allerersten Poll. Fehler (abgelaufener Token, Graph nicht erreichbar,
+  Ordner gelöscht) landen sichtbar in `EmailWatchConfig.letzter_fehler`, ohne
+  den Rest der App zu beeinträchtigen (gleiches Prinzip wie ein
+  Claude-Ausfall). Settings-UI: globaler "Mit Microsoft verbinden"-Button
+  (OAuth-Redirect-Flow) sowie pro Projekt Ordnerauswahl, Intervall,
+  Aktiv-Schalter und ein manueller "Jetzt abrufen"-Button.
+  **Einrichtung erfordert eine selbst angelegte Azure-AD-App-Registrierung**
+  (Typ "Web", Redirect-URI `https://<domain>/api/email-watch/oauth/callback`,
+  delegated permissions `Mail.Read` + `offline_access`) – Client-ID/-Secret/
+  Tenant-ID/Redirect-URI werden über `MS_GRAPH_*`-Variablen in `.env`
+  eingetragen (siehe `.env.example`); ohne sie bleibt ausschließlich diese
+  eine Funktion unverfügbar, der Rest der App läuft unverändert.
 
 ## Lokale Entwicklung
 
@@ -798,3 +822,9 @@ durchgehend durchsuchbar, nur das jeweils gerade verarbeitete Dokument kurz
 nicht. Beide Varianten zeigen währenddessen "Index wird aktualisiert" (mit
 Polling, wie beim Foto-Review-Schritt) und eine Sicherheitsabfrage vor dem
 Projekt-weiten Lauf.
+
+**Nachtrag:** Quellenangaben im Chat sind antippbar und öffnen direkt die
+Dokument-Detailansicht im Dokumente-Tab (geht dabei über den bereits
+existierenden Tab hinweg, siehe `ProjectShellScreen`) - genau wie ursprünglich
+im Briefing vorgesehen. Gelöschte Quellen bleiben bewusst nicht antippbar
+(die Detailansicht würde nur einen 404 zeigen).

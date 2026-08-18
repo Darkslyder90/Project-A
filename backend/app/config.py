@@ -43,6 +43,16 @@ class Settings(BaseSettings):
 
     max_upload_size_mb: int = 50
 
+    # Microsoft-Graph-App-Registrierung fuer die optionale Outlook-
+    # Ordnerueberwachung (siehe Briefing Kernfunktion 12) - alle vier muessen
+    # gesetzt sein, damit der OAuth-Login-Flow nutzbar ist. Fehlen sie, bleibt
+    # diese eine Funktion einfach nicht verfuegbar (Settings zeigen das an),
+    # der Rest der App startet unveraendert weiter.
+    ms_graph_client_id: str | None = None
+    ms_graph_client_secret: str | None = None
+    ms_graph_tenant_id: str | None = None
+    ms_graph_redirect_uri: str | None = None
+
     # Kommagetrennte Liste erlaubter Frontend-Origins (Dev: Vite-Dev-Server).
     cors_origins: str = "http://localhost:5173"
 

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes.chat import router as chat_router
 from app.api.routes.documents import router as documents_router
+from app.api.routes.email_watch import router as email_watch_router
 from app.api.routes.health import router as health_router
 from app.api.routes.meetings import router as meetings_router
 from app.api.routes.people import router as people_router
@@ -15,6 +16,7 @@ from app.api.routes.retrieval import router as retrieval_router
 from app.api.routes.settings import router as settings_router
 from app.api.routes.tags import router as tags_router
 from app.api.routes.tasks import router as tasks_router
+from app.background.email_scheduler import EmailPollScheduler
 from app.background.recovery import recover_stuck_documents
 from app.background.task_runner import DocumentTaskRunner
 from app.config import Settings, get_settings
@@ -36,8 +38,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     for document_id in document_ids:
         task_runner.enqueue(document_id)
 
+    # Outlook-Ordnerueberwachung (siehe Briefing Kernfunktion 12) - eigener,
+    # periodischer Scheduler, konzeptionell getrennt vom DocumentTaskRunner.
+    email_scheduler: EmailPollScheduler = app.state.email_scheduler
+    email_scheduler.start()
+
     yield
 
+    email_scheduler.shutdown()
     await task_runner.stop()
 
 
@@ -59,6 +67,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Request - process_document() ist unveraendert dieselbe Funktion wie in
     # Schritt 3 (nimmt nur eine document_id entgegen, siehe Briefing).
     app.state.task_runner = DocumentTaskRunner(process_document, session_factory)
+    # Kernfunktion 12: eigener periodischer Scheduler fuer die Outlook-
+    # Ordnerueberwachung, laeuft unabhaengig davon, ob MS_GRAPH_* konfiguriert
+    # ist (ohne aktive EmailWatchConfig-Zeilen ist jeder Tick ein No-Op).
+    app.state.email_scheduler = EmailPollScheduler(session_factory, app.state.task_runner)
 
     app.add_middleware(
         CORSMiddleware,
@@ -82,6 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(meetings_router)
     app.include_router(tags_router)
     app.include_router(settings_router)
+    app.include_router(email_watch_router)
 
     return app
 

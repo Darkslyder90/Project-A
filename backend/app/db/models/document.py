@@ -38,6 +38,11 @@ class Document(Base):
     datei_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     dateiname: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
+    # Nur bei automatisch per Outlook-Ordnerueberwachung angelegten Documents
+    # (siehe Briefing Kernfunktion 12) - mail-spezifische Duplikatserkennung
+    # anstelle von datei_hash, da keine Datei vorliegt.
+    outlook_message_id: Mapped[str | None] = mapped_column(String(300), nullable=True, index=True)
+
     status: Mapped[DocumentStatus] = mapped_column(
         SAEnum(DocumentStatus, native_enum=False, length=30),
         nullable=False,

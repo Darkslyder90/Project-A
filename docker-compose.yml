@@ -18,6 +18,10 @@ services:
       CLAUDE_MODEL_DEFAULT: ${CLAUDE_MODEL_DEFAULT:-claude-opus-5}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-50}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      MS_GRAPH_CLIENT_ID: ${MS_GRAPH_CLIENT_ID:-}
+      MS_GRAPH_CLIENT_SECRET: ${MS_GRAPH_CLIENT_SECRET:-}
+      MS_GRAPH_TENANT_ID: ${MS_GRAPH_TENANT_ID:-}
+      MS_GRAPH_REDIRECT_URI: ${MS_GRAPH_REDIRECT_URI:-}
     volumes:
       - project-a-data:/data
     networks:
